@@ -14,7 +14,8 @@ class HFLocalModel(ChatModel):
     provider = "hf"
 
     def __init__(self, model: str, *, device: str | None = None, temperature: float | None = None,
-                 top_p: float | None = None, max_tokens: int = 1024, dtype: str = "auto") -> None:
+                 top_p: float | None = None, max_tokens: int = 1024, dtype: str = "auto",
+                 adapter: str | None = None, load_in_4bit: bool = False) -> None:
         super().__init__(model)
         try:
             import torch
@@ -29,12 +30,24 @@ class HFLocalModel(ChatModel):
         self.temperature, self.top_p, self.max_tokens = temperature, top_p, max_tokens
         self.tok = AutoTokenizer.from_pretrained(model)
         torch_dtype = dtype if dtype == "auto" else getattr(torch, str(dtype))  # "bfloat16" → torch.bfloat16
-        self.lm = AutoModelForCausalLM.from_pretrained(model, dtype=torch_dtype).to(self.device).eval()
+        if load_in_4bit:
+            from transformers import BitsAndBytesConfig
+
+            q = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_compute_dtype=torch.bfloat16)
+            self.lm = AutoModelForCausalLM.from_pretrained(model, quantization_config=q, device_map="auto")
+        else:
+            self.lm = AutoModelForCausalLM.from_pretrained(model, dtype=torch_dtype).to(self.device)
+        self.adapter = adapter
+        if adapter:  # a Quill-RL LoRA adapter (local directory or Hub id)
+            from peft import PeftModel
+
+            self.lm = PeftModel.from_pretrained(self.lm, adapter)
+        self.lm.eval()
         if self.tok.chat_template is None:
             raise ModelConfigError(f"{model} has no chat template; use an instruct/chat checkpoint")
 
     def describe(self) -> dict:
-        return {"provider": self.provider, "model": self.model, "device": self.device,
+        return {"provider": self.provider, "model": self.model, "device": self.device, "adapter": self.adapter,
                 "temperature": self.temperature, "top_p": self.top_p}
 
     def generate(self, system: str, messages: list[dict[str, str]], *,

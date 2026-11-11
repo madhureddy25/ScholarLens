@@ -395,5 +395,55 @@ def _json_preview(entry: dict) -> str:
                        ensure_ascii=False)
 
 
+learn_app = typer.Typer(help="Continuous learning: improve Quill and Lens from data and community feedback.")
+app.add_typer(learn_app, name="learn")
+
+
+@learn_app.command("quill")
+def learn_quill(
+    bench: Path = typer.Option(..., help="bench.jsonl (public human paragraphs; test split is the frozen eval set)."),
+    repo_dir: Path = typer.Option(Path("."), help="Repository checkout containing contributions/."),
+    base: str = typer.Option("Qwen/Qwen2.5-0.5B-Instruct", help="Base instruct model."),
+    current: str = typer.Option(None, help="Current adapter to beat (directory); default: the base model alone."),
+    mode: str = typer.Option("proofread", help="proofread | clarity | concise"),
+    out: Path = typer.Option(Path("models/quill-rl"), help="Where to write the new adapter and report."),
+    steps: int = typer.Option(200, help="GRPO/DPO optimisation steps."),
+    group: int = typer.Option(4, help="GRPO group size (candidates per paragraph)."),
+    load_in_4bit: bool = typer.Option(False, "--4bit", help="QLoRA (needed for 1.5B+ on a 6 GB GPU)."),
+    cpu: bool = typer.Option(False, help="Train on CPU (slow; for testing)."),
+    grammar_url: str = typer.Option(None, help="LanguageTool server for the quality reward."),
+    judge: str = typer.Option(None, help="Model spec for the LLM-judge quality reward (e.g. ollama:qwen2.5:3b)."),
+    similarity_model: str = typer.Option("sentence-transformers/all-MiniLM-L6-v2"),
+) -> None:
+    """Train a better Quill adapter and keep it only if it beats the current one on a frozen test set."""
+    from scholarlens.edit import sentence_transformer_similarity
+    from scholarlens.learn.quill import improve_quill
+    from scholarlens.llm import load_model
+    from scholarlens.rl.rewards import LanguageToolChecker, LLMJudge, QuillReward
+    from scholarlens.rl.train import RLConfig
+
+    reward = QuillReward(similarity=sentence_transformer_similarity(similarity_model),
+                         grammar=LanguageToolChecker(grammar_url) if grammar_url else None,
+                         judge=LLMJudge(load_model(judge)) if judge else None)
+    if not grammar_url and not judge:
+        console.print("[yellow]No --grammar-url or --judge: the quality reward is off, so training mainly teaches "
+                      "integrity, fidelity and restraint.[/]")
+    cfg = RLConfig(base_model=base, out_dir=str(out), max_steps=steps, num_generations=group,
+                   per_device_train_batch_size=group, load_in_4bit=load_in_4bit, use_cpu=cpu)
+    rep = improve_quill(bench=bench, repo_dir=repo_dir, cfg=cfg, reward=reward, mode=mode, current_adapter=current,
+                        log=lambda m: console.print(m, highlight=False))
+    t = Table(title="Quill: candidate vs current (frozen eval set)")
+    for col in ("metric", "current", "candidate"):
+        t.add_column(col)
+    for k in ("integrity_rate", "format_rate", "mean_reward", "mean_similarity", "mean_quality", "mean_change"):
+        a, b = rep["current"].get(k), rep["candidate"].get(k)
+        t.add_row(k, "—" if a is None else f"{a:.3f}", "—" if b is None else f"{b:.3f}")
+    console.print(t)
+    if rep["accepted"]:
+        console.print(f"[green]accepted[/]: publish with `scholarlens learn publish quill {out}`")
+    else:
+        console.print(f"[yellow]not accepted[/]: {'; '.join(rep['reasons'])}")
+
+
 if __name__ == "__main__":
     app()
