@@ -1,0 +1,39 @@
+{
+  "n_records": 340,
+  "n_papers": 120,
+  "by_family_and_split": {
+    "ai": {
+      "test": 7,
+      "train": 98,
+      "val": 15
+    },
+    "ai+llm_paraphrase": {
+      "test": 2,
+      "train": 50,
+      "val": 8
+    },
+    "human": {
+      "test": 7,
+      "train": 98,
+      "val": 15
+    },
+    "human+quill_proofread": {
+      "test": 1,
+      "train": 33,
+      "val": 6
+    }
+  },
+  "generators": {
+    "hf:Qwen/Qwen2.5-0.5B-Instruct": 60,
+    "hf:HuggingFaceTB/SmolLM2-360M-Instruct": 60
+  },
+  "domains": {
+    "physics": 94,
+    "cs": 5,
+    "math": 16,
+    "q-fin": 2,
+    "q-bio": 3
+  },
+  "leakage": {},
+  "built_at": "2026-11-11T22:42:37+00:00"
+}

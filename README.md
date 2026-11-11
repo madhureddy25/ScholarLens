@@ -6,7 +6,20 @@ Integrity-first tooling for academic text:
 - **Quill**: a citation-safe editing assistant for an author's own drafts. Citations, equations, numbers and domain terms are guaranteed untouched, and every session produces a disclosure log.
 
 Both share one core: a structure-aware document parser and a masking engine that protects everything that must not change.
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the design, evaluation targets and roadmap.
+## Documentation
+
+| Document | Read it for |
+|---|---|
+| [`docs/PROJECT_LOG.md`](docs/PROJECT_LOG.md) | History, design decisions and their reasons, bugs and research findings, next steps |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System design, module map, evaluation targets, roadmap |
+| [`docs/WINDOWS.md`](docs/WINDOWS.md) | Step-by-step PowerShell runbook for the study on a Windows laptop |
+| [`docs/LAPTOP.md`](docs/LAPTOP.md) / [`docs/GPU.md`](docs/GPU.md) | 6 GB laptop GPU / 24 GB GPU setups |
+| [`docs/LEARNING.md`](docs/LEARNING.md) | How the community learning loop works, and its guard rails |
+| [`docs/PAPER_PLAN.md`](docs/PAPER_PLAN.md) | Research questions, tables and figures for the paper |
+| [`reports/`](reports/) | Saved evaluation reports |
+| [`CLAUDE.md`](CLAUDE.md) | Project rules and commands for AI coding assistants |
+
+**Status (Nov 2026):** all components are implemented and tested, and CI runs on Python 3.11–3.13. Next: run the laptop study ([`docs/WINDOWS.md`](docs/WINDOWS.md)), publish the first releases, and write the paper.
 
 ## Install
 
