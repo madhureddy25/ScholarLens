@@ -46,6 +46,13 @@ class HFLocalModel(ChatModel):
         if self.tok.chat_template is None:
             raise ModelConfigError(f"{model} has no chat template; use an instruct/chat checkpoint")
 
+    @property
+    def name(self) -> str:
+        from pathlib import Path
+
+        suffix = f"+{Path(self.adapter).name}" if getattr(self, "adapter", None) else ""
+        return f"{self.provider}:{self.model}{suffix}"
+
     def describe(self) -> dict:
         return {"provider": self.provider, "model": self.model, "device": self.device, "adapter": self.adapter,
                 "temperature": self.temperature, "top_p": self.top_p}

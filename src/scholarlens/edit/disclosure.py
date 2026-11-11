@@ -70,6 +70,8 @@ def disclosure_statement(session: EditSession) -> str:
     n = sum(1 for e in session.edits if e.status == Status.ACCEPTED)
     total = len(session.edits)
     model = f"{session.model.get('provider')}:{session.model.get('model')}"
+    if session.model.get("adapter"):
+        model += f" with the fine-tuned adapter '{Path(str(session.model['adapter'])).name}'"
     served = {e.served_by for e in session.edits if e.status == Status.ACCEPTED and e.served_by}
     if served - {model}:
         model += f" (some requests served by {', '.join(sorted(served - {model}))})"

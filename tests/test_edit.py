@@ -271,3 +271,12 @@ def test_docx_edit_that_moves_protected_item_keeps_original(tmp_path):
     manifest = json.loads(files["disclosure"].read_text())
     assert manifest["docx"]["written"] == [] and "moves a protected item" in manifest["docx"]["kept_original"][0]
     assert load(files["edited"]).nodes[1].text == doc.nodes[1].text
+
+
+def test_disclosure_names_fine_tuned_adapter():
+    from scholarlens.edit.disclosure import disclosure_statement
+
+    doc = load(FIX / "sample_paper.tex")
+    session = Quill(ScriptedModel(_rewrite)).edit_document(doc)
+    session.model = {"provider": "hf", "model": "Qwen/Qwen2.5-0.5B-Instruct", "adapter": "/x/models/quill-rl-v1"}
+    assert "fine-tuned adapter 'quill-rl-v1'" in disclosure_statement(session)

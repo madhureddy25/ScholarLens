@@ -73,6 +73,23 @@ The full table of changes from the blueprint is in `ARCHITECTURE.md`. In short:
 | 8 | **Windows cp1252 default encoding** would crash on `⟦⟧`, `≤` and `—`. | All text I/O names UTF-8; a test enforces it. |
 | 9 | **Hugging Face downloads behind a proxy:** the Xet protocol and CDN redirects failed. | `HF_HUB_DISABLE_XET=1`, set at package import. Hosts needed: huggingface.co, us.aws.cdn.hf.co, eu.aws.cdn.hf.co, cdn-lfs*.hf.co, download.pytorch.org. |
 
+| 10 | **The disclosure statement omitted the Quill-RL adapter**, so it would name only the base model. Found in the end-to-end check. | The statement and model name now include the adapter, e.g. "…with the fine-tuned adapter 'quill-rl-v1'". |
+
+## 4b. End-to-end verification (CPU, real models, nothing published)
+
+Every user-facing path was run for real on the pilot data, in addition to the 190 unit tests and 3 slow tests (real GPT-2, a real Qwen Quill edit, a real GRPO step):
+
+| Path | Result |
+|---|---|
+| `edit` with Qwen2.5-0.5B → `review --accept-all` → `contribute` → `learn validate --strict` | ✅ Final paper written. The contribution file has only masked text: no citation keys, paths or endpoints, and the private `% TODO` comment was masked. |
+| `learn lens` round 1 (no current model) | ✅ Accepted, exit 0; 2 contributions became 4 training-only human examples |
+| package → install (checksum, safe extract) → `detect` with no path | ✅ Archive excluded the feature cache; release notes and table generated; installed model used automatically |
+| `learn lens` round 2 against the installed model | ✅ Hard-example mining (5); candidate slightly worse, so **correctly rejected**, exit 3 (CI won't publish) |
+| `lens train --binoculars` | ✅ Binoculars (gpt2/distilgpt2) in every table |
+| API `/v1/detect` with a real model | ✅ Same P(AI) as the CLI; empty input handled |
+| `learn quill`: GRPO → DPO (2 author pairs) → evaluate base vs adapter → gate | ✅ 1.6 min on CPU; 2 steps don't improve it, so **correctly rejected**. The base 0.5B model keeps all placeholders in only 75% of paragraphs, which is what the integrity reward targets. |
+| `edit -m quill:<adapter>` | ✅ Adapter loads; disclosure records it (see finding 10) |
+
 ## 5. CPU pilot result (pipeline check only)
 
 `configs/bench.pilot-cpu.toml` used 120 real pre-2022 arXiv abstracts, AI counterparts from Qwen2.5-0.5B and SmolLM2-360M, 60 LLM-paraphrase attacks and 40 Quill-proofread human abstracts. That's 340 records with no leakage. The full report is `reports/pilot-cpu/report.md`.
