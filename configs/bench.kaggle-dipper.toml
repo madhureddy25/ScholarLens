@@ -1,0 +1,27 @@
+# Run on a Kaggle (or Colab) GPU after copying data/bench/laptop-v1 there.
+# The builder reuses the cached human/AI/other files and only runs the DIPPER attacks.
+# 8-bit DIPPER needs ~12 GB: a free Kaggle T4 (16 GB) is enough.  pip install bitsandbytes
+[bench]
+out = "data/bench/laptop-v1"
+seed = 13
+n_human = 1500
+
+[[sources]]
+type = "arxiv"
+
+[[generators]]
+model = "echo"                     # unused: all AI texts are already cached
+
+[[transforms]]
+type = "dipper"
+lex = 20
+order = 0
+load_in_8bit = true
+limit = 500
+
+[[transforms]]
+type = "dipper"
+lex = 60
+order = 60
+load_in_8bit = true
+limit = 500

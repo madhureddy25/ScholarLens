@@ -90,6 +90,10 @@ The second table is the fairness result: it shows whether honest authors who edi
 
 Builds are resumable and every step is cached. `configs/bench.pilot-cpu.toml` runs fully offline with small local models (an easy pilot); the real study should use several strong generators (see `configs/bench.example.toml`). DIPPER attacks need a GPU.
 
+## It keeps improving: community learning
+
+Authors review Quill's suggestions (`scholarlens review`). They can share their accept/reject decisions as masked text (`scholarlens contribute`). CI retrains Lens and publishes a new version only if it beats the current one on a frozen test set. Quill is improved by reinforcement learning on checkable rewards: citations kept, meaning preserved, real errors fixed, restraint. A detector is never part of its reward. Everyone gets the latest models with `scholarlens update`. See [`docs/LEARNING.md`](docs/LEARNING.md). On a 6 GB laptop GPU, follow [`docs/LAPTOP.md`](docs/LAPTOP.md).
+
 ## Python
 
 ```python

@@ -1,0 +1,59 @@
+# Laptop study: NVIDIA RTX 3050 6 GB (Windows), generators served by Ollama in 4-bit.
+#   1. Install Ollama (https://ollama.com), then:
+#        ollama pull qwen2.5:7b   &&   ollama pull phi3.5   &&   ollama pull llama3.2:3b
+#      Optional (2 requests at a time): set OLLAMA_NUM_PARALLEL=2 before starting Ollama.
+#   2. scholarlens bench build configs/bench.laptop.toml --n-human 30 --out data/bench/laptop-smoke
+#   3. scholarlens bench build configs/bench.laptop.toml
+# DIPPER does not fit in 6 GB: run it afterwards on a free Kaggle/Colab GPU (docs/LAPTOP.md, step 5).
+# Model licences: Qwen2.5-7B Apache-2.0 · Phi-3.5 MIT · Llama 3.2 Community Licence.
+
+[bench]
+out = "data/bench/laptop-v1"
+seed = 13
+n_human = 1500
+before_year = 2022
+min_words = 100
+max_words = 300
+max_tokens = 600
+concurrency = 2
+prompt_styles = ["title", "title_first_sentence"]
+splits = { train = 0.8, val = 0.1, test = 0.1 }
+
+[[sources]]
+type = "arxiv"
+
+[[generators]]
+model = "ollama:qwen2.5:7b"       # Q4 ≈ 4.7 GB: fits 6 GB on its own (generators load one at a time)
+options = { temperature = 0.7, top_p = 0.95 }
+
+[[generators]]
+model = "ollama:phi3.5"
+options = { temperature = 0.7, top_p = 0.95 }
+
+[[generators]]
+model = "ollama:llama3.2:3b"
+options = { temperature = 0.7, top_p = 0.95 }
+
+# --- attacks on AI text (robustness) ---
+[[transforms]]
+type = "llm_paraphrase"
+model = "ollama:qwen2.5:7b"
+apply_to = "ai"
+limit = 500
+
+# --- legitimate edits of human text (fairness) ---
+[[transforms]]
+type = "quill"
+mode = "proofread"
+model = "ollama:qwen2.5:7b"
+apply_to = "human"
+similarity_model = "sentence-transformers/all-MiniLM-L6-v2"
+limit = 500
+
+[[transforms]]
+type = "quill"
+mode = "clarity"
+model = "ollama:qwen2.5:7b"
+apply_to = "human"
+similarity_model = "sentence-transformers/all-MiniLM-L6-v2"
+limit = 500

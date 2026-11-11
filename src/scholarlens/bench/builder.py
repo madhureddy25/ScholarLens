@@ -116,7 +116,11 @@ def build(config: dict, *, log=print, load_model=None) -> dict:
                 log(f"  {t.name}: {i}/{len(todo)}")
         del t
         _release_gpu()
-        derived += list(read_jsonl(tpath)) if tpath.is_file() else []
+
+    # merge every transform cached in this benchmark, including ones produced by an earlier
+    # config (e.g. DIPPER run separately on a bigger GPU)
+    tdir = out / "transforms"
+    derived = [r for p in sorted(tdir.glob("*.jsonl")) for r in read_jsonl(p)] if tdir.is_dir() else []
 
     # generated text is cleaned again at assembly (idempotent), so caches built before a
     # cleaning fix are corrected too; human text is never altered here

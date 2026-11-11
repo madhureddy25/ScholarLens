@@ -181,3 +181,15 @@ def test_clean_generation_removes_format_artifacts(raw, clean):
 
     assert clean_generation(raw) == clean
     assert clean_generation(clean_generation(raw)) == clean  # idempotent
+
+
+def test_build_merges_transforms_from_earlier_configs(tmp_path):
+    src = tmp_path / "src.jsonl"
+    src.write_text("\n".join(json.dumps({"id": i, "text": ABSTRACT, "year": 2015, "title": f"T{i}"}) for i in range(10)))
+    fake = lambda spec, **kw: ScriptedModel(lambda u: "Generated text for this abstract.", model=spec)  # noqa: E731
+    base = {"bench": {"out": str(tmp_path / "o"), "n_human": 10, "min_words": 20},
+            "sources": [{"type": "jsonl", "path": str(src)}], "generators": [{"model": "g"}]}
+    build({**base, "transforms": [{"type": "llm_paraphrase", "model": "p", "apply_to": "ai"}]},
+          log=lambda *_: None, load_model=fake)
+    m = build({**base, "transforms": []}, log=lambda *_: None, load_model=fake)  # second run, other config
+    assert sum(m["by_family_and_split"]["ai+llm_paraphrase"].values()) == 10
