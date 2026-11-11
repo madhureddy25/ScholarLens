@@ -94,5 +94,100 @@ def features(path: Path, lm: str = typer.Option(None, help="HF causal LM for PPL
     console.print(f"{len(report['segments'])} segments · protected spans {report['protected_spans']}")
 
 
+@app.command()
+def models(config: Path = typer.Option(None, help="Profiles file (default: ./scholarlens.toml).")) -> None:
+    """List model providers and configured profiles."""
+    from scholarlens.llm import available_providers, load_profiles
+
+    console.print("[bold]Providers[/] (use as --model provider:model): " + ", ".join(available_providers()))
+    profiles, default = load_profiles(config)
+    if not profiles:
+        console.print("No profiles found. Copy configs/models.example.toml to ./scholarlens.toml to add some.")
+        return
+    t = Table(title="Profiles")
+    for col in ("name", "provider", "model", "options"):
+        t.add_column(col)
+    for name, p in profiles.items():
+        opts = {k: v for k, v in p.items() if k not in ("provider", "model")}
+        t.add_row(name + (" (default)" if name == default else ""), str(p.get("provider", "")),
+                  str(p.get("model", "")), ", ".join(f"{k}={v}" for k, v in opts.items()))
+    console.print(t)
+
+
+@app.command()
+def edit(
+    path: Path,
+    model: str = typer.Option(None, "--model", "-m", help="provider:model or profile name."),
+    opt: list[str] = typer.Option(None, "--opt", help="Model option key=value (repeatable), e.g. effort=low."),
+    mode: str = typer.Option("clarity", help="proofread | clarity | concise"),
+    out: Path = typer.Option(None, help="Output directory (default: <file>_quill/)."),
+    sections: str = typer.Option(None, help="Comma-separated section titles to edit."),
+    nodes: str = typer.Option(None, help="Comma-separated node ids to edit (see `scholarlens parse`)."),
+    min_similarity: float = typer.Option(0.94, help="Semantic-similarity gate; 0 disables."),
+    similarity_model: str = typer.Option("sentence-transformers/all-MiniLM-L6-v2",
+                                         help="sentence-transformers model for the similarity gate."),
+    max_attempts: int = typer.Option(3, help="Attempts per paragraph before keeping the original."),
+    glossary: Path = typer.Option(None, help="File with one protected term per line."),
+    config: Path = typer.Option(None, help="Model profiles file."),
+    dry_run: bool = typer.Option(False, help="Show what would be sent to the model, without calling it."),
+) -> None:
+    """Quill: citation-safe language editing of your own manuscript."""
+    from scholarlens.edit import EditConfig, Quill, write_outputs
+    from scholarlens.edit.prompts import system_prompt, user_prompt
+    from scholarlens.llm import ModelConfigError, load_model
+    from scholarlens.llm.registry import parse_options
+
+    doc = load(path)
+    terms = tuple(t.strip() for t in glossary.read_text().splitlines() if t.strip()) if glossary else ()
+    masker = Masker(MaskConfig(glossary=terms))
+    cfg = EditConfig(mode=mode, max_attempts=max_attempts, min_similarity=min_similarity or None,
+                     sections=tuple(s.strip() for s in sections.split(",")) if sections else None,
+                     node_ids=tuple(n.strip() for n in nodes.split(",")) if nodes else None)
+    selected = [n for n in doc.prose()
+                if (cfg.node_ids is None or n.id in cfg.node_ids)
+                and (cfg.sections is None or (n.section or "").lower() in {s.lower() for s in cfg.sections})]
+    n_words = sum(len(n.text.split()) for n in selected)
+    console.print(f"{len(selected)} prose paragraphs selected (~{n_words} words) from {path.name}")
+    if dry_run:
+        console.rule("system prompt")
+        console.print(system_prompt(mode, doc.source_format), markup=False, highlight=False)
+        for n in selected[:3]:
+            console.rule(f"user message for {n.id}")
+            console.print(user_prompt(masker.mask_node(n, doc.source_format).masked), markup=False, highlight=False)
+        if len(selected) > 3:
+            console.print(f"… and {len(selected) - 3} more")
+        return
+
+    try:
+        chat = load_model(model, config=config, **parse_options(opt))
+    except ModelConfigError as e:
+        console.print(f"[red]{e}[/]")
+        raise typer.Exit(2) from e
+    sim = None
+    if cfg.min_similarity:
+        from scholarlens.edit import sentence_transformer_similarity
+
+        sim = sentence_transformer_similarity(similarity_model)
+    console.print(f"model: [bold]{chat.name}[/] · mode: {mode} · similarity gate: "
+                  f"{cfg.min_similarity if sim else 'off'}")
+    quill = Quill(chat, masker=masker, similarity=sim, config=cfg)
+
+    def progress(k: int, total: int, e) -> None:
+        if e.status.value != "skipped" or e.reason not in ("not selected", "section not selected"):
+            console.print(f"  [{k}/{total}] {e.node_id} {e.status.value}"
+                          + (f" (sim {e.similarity:.3f})" if e.similarity is not None else "")
+                          + (f" — {e.reason}" if e.reason and e.status.value != "unchanged" else ""))
+
+    try:
+        session = quill.edit_document(doc, on_progress=progress)
+    except ModelConfigError as e:
+        console.print(f"[red]{e}[/]")
+        raise typer.Exit(2) from e
+    files = write_outputs(session, out or path.with_name(path.stem + "_quill"), input_path=path)
+    console.print(f"[green]done[/] {session.counts()}")
+    for k, f in files.items():
+        console.print(f"  {k:10} {f}")
+
+
 if __name__ == "__main__":
     app()

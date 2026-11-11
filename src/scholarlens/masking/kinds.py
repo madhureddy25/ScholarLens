@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class Kind(str, Enum):
+class Kind(StrEnum):
     """Categories of protected content. Values are the sentinel prefixes."""
 
     PROT = "PROT"  # pre-declared by the parser (DOCX formatting runs, TEI <ref>)

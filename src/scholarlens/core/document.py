@@ -16,10 +16,10 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 
-class NodeType(str, Enum):
+class NodeType(StrEnum):
     METADATA = "metadata"  # preamble, front matter, author/affiliation blocks
     TITLE = "title"
     HEADING = "heading"

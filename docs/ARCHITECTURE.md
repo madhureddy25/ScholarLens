@@ -57,7 +57,9 @@ ScholarLens is one system with two products on a shared, integrity-preserving co
 | `analysis.py` / `cli.py` | ✅ | Document → segments → features; `scholarlens parse/mask/roundtrip/features` |
 | `bench/` | ⏳ M2 | Dataset builder (human / AI / AI-paraphrased / human-edited), splits, metrics |
 | `detect/` | ⏳ M3 | Feature-fusion classifier, fine-tuned encoder, GNN on sentence graphs, retrieval defence, calibration |
-| `edit/` | ⏳ M4 | Quill rewrite engine, retry/repair loop, similarity gate, tracked changes, disclosure log |
+| `llm/` | ✅ | Provider-neutral `ChatModel`; Anthropic (official SDK, refusal fallbacks), any OpenAI-compatible endpoint (OpenAI, Ollama, vLLM, LM Studio, OpenRouter, Groq, …), in-process Hugging Face; TOML profiles; plugin entry points |
+| `edit/` | ✅ | Quill engine (mask → generate → repair → verify → similarity gate → retry), LaTeX tracked changes, HTML review, disclosure manifest, `scholarlens edit` |
+| `edit/` DOCX writer | ⏳ | Write accepted edits back into .docx as Word revision marks (w:ins / w:del) |
 | `api/` | ⏳ M5 | FastAPI service + minimal web UI |
 
 ## Changes relative to the original blueprint
@@ -70,6 +72,10 @@ ScholarLens is one system with two products on a shared, integrity-preserving co
 | "AST reconstruction" | Span splicing over the original source | Guarantees non-prose bytes are identical (property-tested) |
 | — | DOCX formatting runs and reference-manager fields protected | Italic species names, superscripts and live Zotero citations survive editing |
 | Success = low scores on commercial detectors | Lens: AUROC and TPR@1%FPR on clean **and attacked** text, FPR on human subgroups. Quill: integrity, fidelity, fluency | Measures what matters for each product; no evasion objective |
+
+## Sampling policy
+
+Quill uses each backend's fixed, conservative settings (low temperature where a backend exposes one; current Claude models choose their own sampling and take an `effort` level instead). Retries add specific feedback about what failed. They do not escalate temperature. The blueprint's entropy-targeted dynamic temperature (raising temperature when local entropy is low) is deliberately **not** implemented: its purpose was to shift detector statistics, which is outside Quill's objective.
 
 ## Evaluation targets
 
@@ -101,6 +107,6 @@ ScholarLens is one system with two products on a shared, integrity-preserving co
 | M1 | Shared core: ingestion (LaTeX/MD/TXT/DOCX/TEI) + masking + integrity verification + feature extraction | ✅ |
 | M2 | Bench data builder + metrics | next |
 | M3 | Lens detectors + robustness study | |
-| M4 | Quill editor + tracked changes + disclosure | |
+| M4 | Quill editor + tracked changes + disclosure | ✅ (DOCX revision marks pending) |
 | M5 | API, web UI, docs | |
 | M6 | Paper write-up | |

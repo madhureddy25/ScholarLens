@@ -193,6 +193,12 @@ class MaskResult:
             report = self.verify(text)
             if not report.ok:
                 raise IntegrityError(report)
+        if edited is not None:
+            # a span that carries its own LaTeX non-breaking space ("~\cite{x}") must not
+            # gain an extra space in front of it ("scoring ~\cite{x}" renders a double gap)
+            for s in self.spans:
+                if s.text.startswith("~"):
+                    text = re.sub(r"[ \t]+" + re.escape(s.sentinel), s.sentinel, text)
         return self._substitute(text)
 
     def render(self, text: str | None = None) -> str:

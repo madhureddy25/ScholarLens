@@ -10,3 +10,6 @@ runs/
 *.pt
 *.safetensors
 .env
+*.zip
+*_quill/
+scholarlens.toml

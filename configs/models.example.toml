@@ -1,0 +1,32 @@
+# Copy to ./scholarlens.toml (or ~/.config/scholarlens/models.toml) and edit.
+# Select a profile with  --model <name>,  or use a spec string directly:
+#   --model anthropic:claude-opus-5-5   --model ollama:llama3.1   --model hf:Qwen/Qwen2.5-1.5B-Instruct
+# Secrets never go in this file: API keys come from environment variables.
+
+default = "claude"
+
+[models.claude]                    # needs ANTHROPIC_API_KEY (or `ant auth login`)
+provider = "anthropic"
+model = "claude-opus-5-5"
+effort = "medium"                  # low | medium | high | xhigh | max
+
+[models.claude-fast]
+provider = "anthropic"
+model = "claude-sonnet-5-5"
+effort = "low"
+
+[models.ollama]                    # `ollama serve` + `ollama pull llama3.1`
+provider = "ollama"
+model = "llama3.1"
+temperature = 0.2
+
+[models.lab-server]                # any OpenAI-compatible server (vLLM, TGI, LM Studio, gateway)
+provider = "openai-compatible"
+base_url = "http://localhost:8000/v1"
+model = "Qwen/Qwen2.5-7B-Instruct"
+api_key_env = "LAB_SERVER_KEY"     # omit if the server needs no key
+
+[models.local-cpu]                 # fully offline, runs in-process
+provider = "hf"
+model = "Qwen/Qwen2.5-1.5B-Instruct"
+max_tokens = 1024
