@@ -9,3 +9,7 @@
 """
 
 __version__ = "0.1.0"
+
+# Hugging Face download defaults must be in the environment before huggingface_hub
+# is first imported, so they are applied when the package itself is imported.
+from scholarlens import _hub  # noqa: E402, F401

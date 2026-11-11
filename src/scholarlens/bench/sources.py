@@ -82,7 +82,6 @@ class HFDatasetSource:
     def _rows(self) -> Iterator[dict]:
         from datasets import load_dataset
 
-        import scholarlens._hub  # noqa: F401
 
         ds = load_dataset(self.dataset, self.config, split=self.split, streaming=True)
         if self.shuffle_buffer:

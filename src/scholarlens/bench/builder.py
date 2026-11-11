@@ -59,18 +59,28 @@ def build(config: dict, *, log=print, load_model=None) -> dict:
         write_jsonl(humans, human_path)
     log(f"human: {len(humans)}")
 
-    # 2. AI counterparts
+    # 2. AI counterparts (appended record by record, so an interrupted build resumes)
     ai_path = out / "ai.jsonl"
-    ais = _cached(ai_path)
-    if ais is None:
+    ais = _cached(ai_path) or []
+    done = {r.parent_id for r in ais}
+    todo = [h for h in humans if h.id not in done]
+    if todo:
         gens = config.get("generators", [])
         if not gens:
             raise ValueError("config needs at least one [[generators]] entry")
         models = [load_model(g["model"], **g.get("options", {})) for g in gens]
         styles = tuple(b.get("prompt_styles", ["title"]))
-        ais = generate_all(humans, models, styles=styles, seed=seed, max_tokens=int(b.get("max_tokens", 2048)),
-                           on_progress=lambda k, n, r: log(f"  generated {k}/{n}") if k % 25 == 0 or k == n else None)
-        write_jsonl(ais, ai_path)
+        log(f"generating {len(todo)} AI counterparts ({len(ais)} cached)")
+
+        def keep(k, n, rec):
+            if rec is not None:
+                write_jsonl([rec], ai_path, append=True)
+                ais.append(rec)
+            if k % 25 == 0 or k == n:
+                log(f"  generated {k}/{n}")
+
+        generate_all(todo, models, styles=styles, seed=seed + len(done), max_tokens=int(b.get("max_tokens", 2048)),
+                     on_progress=keep)
     log(f"ai: {len(ais)}")
 
     # 3. transforms (resumable per record)

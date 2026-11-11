@@ -230,5 +230,73 @@ def _print_bench_table(manifest: dict) -> None:
     console.print(f"leakage: {'[green]none[/]' if not manifest['leakage'] else '[red]' + str(manifest['leakage'])}")
 
 
+lens_app = typer.Typer(help="Lens: train and evaluate AI-text detectors on a Bench file.")
+app.add_typer(lens_app, name="lens")
+
+
+@lens_app.command("train")
+def lens_train(
+    bench: Path,
+    out: Path = typer.Option(Path("models/lens"), help="Output directory for models and report."),
+    lm: str = typer.Option("gpt2", help="Causal LM for perplexity/entropy features ('none' to skip)."),
+    embedder: str = typer.Option("sentence-transformers/all-MiniLM-L6-v2", help="Sentence embedder."),
+    gnn: bool = typer.Option(False, help="Also train the sentence-graph GNN."),
+    binoculars: bool = typer.Option(False, help="Also run the Binoculars zero-shot baseline (gpt2/distilgpt2)."),
+    exclude: str = typer.Option(None, help="Comma-separated families held out of training (unseen-attack test)."),
+    estimator: str = typer.Option("hgb", help="hgb (scikit-learn) or lightgbm."),
+    fpr: float = typer.Option(0.01, help="Operating false-positive rate on clean human text."),
+) -> None:
+    """Train Lens on the train split, calibrate on val, report robustness and fairness on test."""
+    from scholarlens.detect.runner import train_and_evaluate
+
+    lm_scorer = emb = bino = None
+    if lm and lm != "none":
+        from scholarlens.features.lm import CausalLMScorer
+
+        lm_scorer = CausalLMScorer(lm)
+    if embedder and embedder != "none":
+        from scholarlens.features.transitions import SentenceTransformerEmbedder
+
+        emb = SentenceTransformerEmbedder(embedder)
+    if binoculars:
+        from scholarlens.detect.zero_shot import Binoculars
+
+        bino = Binoculars()
+    train_and_evaluate(bench, out, lm=lm_scorer, embedder=emb, gnn=gnn, binoculars=bino,
+                                exclude_families=tuple(e.strip() for e in exclude.split(",")) if exclude else (),
+                                estimator=estimator, fpr=fpr, log=lambda m: console.print(m, highlight=False))
+    console.print((out / "report.md").read_text(), markup=False, highlight=False)
+    console.print(f"[green]saved[/] {out}/fusion, {out}/report.json, {out}/report.md")
+
+
+@app.command()
+def detect(path: Path, model: Path = typer.Option(Path("models/lens"), help="Directory from `lens train`."),
+           segment_size: int = 250) -> None:
+    """Score a manuscript with a trained Lens model (per ~250-word segment)."""
+    import json as _json
+
+    from scholarlens.analysis import prose_units, segments
+    from scholarlens.detect import load_featurizer_from_signature
+    from scholarlens.detect.fusion import FusionDetector
+
+    meta = _json.loads((model / "fusion" / "meta.json").read_text())
+    det = FusionDetector.load(model / "fusion", load_featurizer_from_signature(meta["featurizer"]))
+    segs = segments(prose_units(load(path)), segment_size)
+    if not segs:
+        console.print("no prose found")
+        raise typer.Exit(1)
+    probs = det.score_texts([s.text for s in segs], ids=[f"{path}:{s.index}" for s in segs])
+    t = Table(title=f"Lens — {path.name}")
+    for col in ("segment", "nodes", "words", "P(AI)"):
+        t.add_column(col, justify="right" if col != "nodes" else "left")
+    for s, p in zip(segs, probs, strict=True):
+        t.add_row(str(s.index), ",".join(s.node_ids[:4]) + ("…" if len(s.node_ids) > 4 else ""), str(s.n_words),
+                  f"{p:.2f}")
+    console.print(t)
+    console.print(f"document mean P(AI) = {float(probs.mean()):.2f} · max = {float(probs.max()):.2f}")
+    console.print("[dim]Probabilities are calibrated on the Bench data this model was trained on and are evidence, "
+                  "not a verdict. Never use them alone to make decisions about an author.[/]")
+
+
 if __name__ == "__main__":
     app()

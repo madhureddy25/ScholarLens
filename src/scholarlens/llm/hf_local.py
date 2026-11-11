@@ -20,7 +20,6 @@ class HFLocalModel(ChatModel):
             import torch
             from transformers import AutoModelForCausalLM, AutoTokenizer
 
-            import scholarlens._hub  # noqa: F401
         except ImportError as e:  # pragma: no cover
             raise ModelConfigError("pip install 'scholarlens[ml]'") from e
         self.torch = torch

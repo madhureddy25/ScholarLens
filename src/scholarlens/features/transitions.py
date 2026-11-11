@@ -52,9 +52,9 @@ class SentenceTransformerEmbedder:
     def __init__(self, model: str = "sentence-transformers/all-MiniLM-L6-v2", device: str = "cpu") -> None:
         from sentence_transformers import SentenceTransformer
 
-        import scholarlens._hub  # noqa: F401
 
         self.model = SentenceTransformer(model, device=device)
+        self.name = model
 
     def encode(self, sentences: list[str]) -> np.ndarray:
         return np.asarray(self.model.encode(sentences, batch_size=32, show_progress_bar=False))

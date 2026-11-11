@@ -45,7 +45,6 @@ class CausalLMScorer:
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
-        import scholarlens._hub  # noqa: F401
 
         self.torch = torch
         self.model_name = model_name

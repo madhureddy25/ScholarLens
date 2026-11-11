@@ -50,7 +50,6 @@ class DipperParaphraser:
             import torch
             from transformers import T5ForConditionalGeneration, T5Tokenizer
 
-            import scholarlens._hub  # noqa: F401
 
             self.torch = torch
             self.tok = T5Tokenizer.from_pretrained(self._tok_id)
