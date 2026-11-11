@@ -38,7 +38,7 @@ def mask(path: Path, node: str = typer.Option(None, help="Only this node id."),
          glossary: Path = typer.Option(None, help="File with one protected term per line.")) -> None:
     """Show masked prose and the symbol map (Phase 2)."""
     doc = load(path)
-    terms = tuple(t.strip() for t in glossary.read_text().splitlines() if t.strip()) if glossary else ()
+    terms = tuple(t.strip() for t in glossary.read_text(encoding="utf-8").splitlines() if t.strip()) if glossary else ()
     units = prose_units(doc, Masker(MaskConfig(glossary=terms)))
     for u in units:
         if node and u.node_id != node:
@@ -81,7 +81,7 @@ def features(path: Path, lm: str = typer.Option(None, help="HF causal LM for PPL
         emb = SentenceTransformerEmbedder(embedder)
     report = analyze(doc, embedder=emb, lm=lm_scorer, segment_size=segment_size)
     if output:
-        output.write_text(json.dumps(report, indent=2))
+        output.write_text(json.dumps(report, indent=2), encoding="utf-8")
         console.print(f"wrote {output}")
         return
     df = report["document_features"]
@@ -138,7 +138,7 @@ def edit(
     from scholarlens.llm.registry import parse_options
 
     doc = load(path)
-    terms = tuple(t.strip() for t in glossary.read_text().splitlines() if t.strip()) if glossary else ()
+    terms = tuple(t.strip() for t in glossary.read_text(encoding="utf-8").splitlines() if t.strip()) if glossary else ()
     masker = Masker(MaskConfig(glossary=terms))
     cfg = EditConfig(mode=mode, max_attempts=max_attempts, min_similarity=min_similarity or None,
                      sections=tuple(s.strip() for s in sections.split(",")) if sections else None,
@@ -265,7 +265,7 @@ def lens_train(
     train_and_evaluate(bench, out, lm=lm_scorer, embedder=emb, gnn=gnn, binoculars=bino,
                                 exclude_families=tuple(e.strip() for e in exclude.split(",")) if exclude else (),
                                 estimator=estimator, fpr=fpr, log=lambda m: console.print(m, highlight=False))
-    console.print((out / "report.md").read_text(), markup=False, highlight=False)
+    console.print((out / "report.md").read_text(encoding="utf-8"), markup=False, highlight=False)
     console.print(f"[green]saved[/] {out}/fusion, {out}/report.json, {out}/report.md")
 
 
@@ -286,7 +286,7 @@ def detect(path: Path, model: Path = typer.Option(None, help="Directory from `le
     from scholarlens.detect import load_featurizer_from_signature
     from scholarlens.detect.fusion import FusionDetector
 
-    meta = _json.loads((model / "fusion" / "meta.json").read_text())
+    meta = _json.loads((model / "fusion" / "meta.json").read_text(encoding="utf-8"))
     det = FusionDetector.load(model / "fusion", load_featurizer_from_signature(meta["featurizer"]))
     segs = segments(prose_units(load(path)), segment_size)
     if not segs:
@@ -330,7 +330,7 @@ def review(
     from scholarlens.edit.diff import diff
     from scholarlens.learn.review import review_session
 
-    fixed = _json.loads(decisions.read_text()) if decisions else {}
+    fixed = _json.loads(decisions.read_text(encoding="utf-8")) if decisions else {}
 
     def show(e) -> None:
         t = Text()

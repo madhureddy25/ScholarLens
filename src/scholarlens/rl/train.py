@@ -58,7 +58,7 @@ class RLConfig:
 
 def _write_card(out: Path, cfg: RLConfig, kind: str, n: int, extra: dict | None = None) -> None:
     (out / "scholarlens_adapter.json").write_text(json.dumps(
-        {"kind": kind, "base_model": cfg.base_model, "n_examples": n, "config": asdict(cfg), **(extra or {})}, indent=2))
+        {"kind": kind, "base_model": cfg.base_model, "n_examples": n, "config": asdict(cfg), **(extra or {})}, indent=2), encoding="utf-8")
 
 
 def fits(example: dict, cfg: RLConfig) -> bool:

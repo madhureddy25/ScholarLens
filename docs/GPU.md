@@ -7,7 +7,7 @@ Everything below runs on your own machine. A 24 GB NVIDIA card runs the whole co
 ```bash
 git clone https://github.com/madhureddy25/ScholarLens.git && cd ScholarLens
 python -m venv .venv && source .venv/bin/activate        # Windows: use WSL2, or .venv\Scripts\activate
-pip install torch --index-url https://download.pytorch.org/whl/cu124   # match your CUDA (see pytorch.org)
+pip install torch --index-url https://download.pytorch.org/whl/cu126   # match your CUDA (see pytorch.org)
 pip install -e ".[all,dev]" datasets accelerate
 python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
 pytest -q -m "not slow"                                   # should be all green

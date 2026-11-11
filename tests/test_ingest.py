@@ -215,3 +215,24 @@ def test_tei_parsing_with_protected_refs():
     got = [(p.text[s["start"]:s["end"]], s["reason"]) for s in p.meta["protected"]]
     assert got == [("(Smith et al., 2020)", "citation"), ("Fig. 1", "figure-ref")]
     assert "Pipeline overview." in doc.render_markdown()
+
+
+def test_all_text_io_is_explicitly_utf8():
+    """Windows defaults to cp1252: every text read/write must name UTF-8 (placeholders, ≤, —)."""
+    import re
+
+    src = Path(__file__).parents[1] / "src" / "scholarlens"
+    bad = []
+    for p in src.rglob("*.py"):
+        text = p.read_text(encoding="utf-8")
+        for m in re.finditer(r"\.(read_text|write_text)\(", text):
+            call = text[m.end():m.end() + 400]
+            depth, i = 1, 0
+            while depth and i < len(call):
+                depth += {"(": 1, ")": -1}.get(call[i], 0)
+                i += 1
+            if "encoding=" not in call[:i]:
+                bad.append(f"{p.name}: {text[m.start():m.end() + i][:80]}")
+        bad += [f"{p.name}: open() without encoding" for line in text.splitlines()
+                if re.search(r"\.open\(\"[aw]\"\)", line)]
+    assert not bad, bad

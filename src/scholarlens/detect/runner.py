@@ -67,8 +67,8 @@ def train_and_evaluate(bench: str | Path, out: str | Path, *, lm=None, embedder=
     importance = fusion.importance(split["val"] or test)
     result = {"bench": str(bench), "fpr": fpr, "train_info": fusion.train_info, "detectors": reports,
               "fusion_feature_importance": importance}
-    (out / "report.json").write_text(json.dumps(result, indent=2, default=_json_default))
-    (out / "report.md").write_text(render_markdown(result))
+    (out / "report.json").write_text(json.dumps(result, indent=2, default=_json_default), encoding="utf-8")
+    (out / "report.md").write_text(render_markdown(result), encoding="utf-8")
     return result
 
 

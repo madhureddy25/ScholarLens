@@ -94,7 +94,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         from scholarlens.detect.fusion import FusionDetector
 
         path = Path(settings.lens_model) / "fusion"
-        meta = json.loads((path / "meta.json").read_text())
+        meta = json.loads((path / "meta.json").read_text(encoding="utf-8"))
         return FusionDetector.load(path, load_featurizer_from_signature(meta["featurizer"]))
 
     @app.get("/health")

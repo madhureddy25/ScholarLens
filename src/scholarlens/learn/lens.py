@@ -98,5 +98,5 @@ def improve_lens(*, bench: str | Path, repo_dir: str | Path, out_dir: str | Path
     candidate.save(out / "fusion")
     report = {"accepted": accepted, "reasons": reasons, "candidate": rep_new, "current": rep_cur,
               "n_contributions": len(contrib), "n_hard_examples": len(weights), "bench": str(bench)}
-    (out / "learn_report.json").write_text(json.dumps(report, indent=2, default=lambda o: list(o) if isinstance(o, tuple) else str(o)))
+    (out / "learn_report.json").write_text(json.dumps(report, indent=2, default=lambda o: list(o) if isinstance(o, tuple) else str(o)), encoding="utf-8")
     return report

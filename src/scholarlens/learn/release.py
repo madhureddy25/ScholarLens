@@ -67,7 +67,7 @@ def release_notes(kind: str, src: Path, digest: str) -> str:
     lines = [f"Automated {kind} release from ScholarLens continuous learning.", "", f"sha256: {digest}", ""]
     rep = src / "learn_report.json"
     if rep.is_file():
-        r = json.loads(rep.read_text())
+        r = json.loads(rep.read_text(encoding="utf-8"))
         if kind == "lens" and r.get("candidate"):
             lines.append("| family | AUROC | TPR@1%FPR |")
             lines.append("|---|---|---|")
@@ -91,7 +91,7 @@ def publish(kind: str, src: str | Path, *, force: bool = False, repo: str | None
         raise ValueError(kind)
     src, repo = Path(src), repo or repo_slug()
     rep = src / "learn_report.json"
-    if kind != "bench" and not force and (not rep.is_file() or not json.loads(rep.read_text()).get("accepted")):
+    if kind != "bench" and not force and (not rep.is_file() or not json.loads(rep.read_text(encoding="utf-8")).get("accepted")):
         raise ValueError("refusing to publish: the learn report does not mark this candidate as accepted")
     tags = runner(["gh", "release", "list", "--repo", repo, "--limit", "200", "--json", "tagName", "--jq", ".[].tagName"],
                   check=True, capture_output=True, text=True).stdout.split()
@@ -147,13 +147,13 @@ def install(kind: str, release: dict, *, download=None) -> Path:
             shutil.rmtree(dest)
         dest.mkdir(parents=True)
         _safe_extract(archive, dest)
-    (root / "current").write_text(release["tag_name"])
+    (root / "current").write_text(release["tag_name"], encoding="utf-8")
     return dest
 
 
 def installed(kind: str) -> Path | None:
     pointer = home() / "models" / kind / "current"
     if pointer.is_file():
-        d = pointer.parent / pointer.read_text().strip()
+        d = pointer.parent / pointer.read_text(encoding="utf-8").strip()
         return d if d.is_dir() else None
     return None

@@ -47,5 +47,5 @@ def improve_quill(*, bench: str | Path, repo_dir: str | Path, cfg: RLConfig, rew
     report = {"accepted": accepted, "reasons": reasons, "current": {"adapter": current_adapter, **cur_metrics},
               "candidate": {"adapter": str(adapter), **new_metrics}, "mode": mode, "n_train": len(train),
               "n_contributions": len(contrib), "n_dpo_pairs": len(pairs), "base_model": cfg.base_model}
-    (out / "learn_report.json").write_text(json.dumps(report, indent=2))
+    (out / "learn_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     return report

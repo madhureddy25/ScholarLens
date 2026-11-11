@@ -27,7 +27,7 @@ from scholarlens.bench.transforms import make_transform
 
 
 def load_config(path: str | Path) -> dict:
-    return tomllib.loads(Path(path).read_text())
+    return tomllib.loads(Path(path).read_text(encoding="utf-8"))
 
 
 def _cached(path: Path) -> list[Record] | None:
@@ -133,7 +133,7 @@ def build(config: dict, *, log=print, load_model=None) -> dict:
     write_jsonl(allrecs, out / "bench.jsonl")
     manifest = summarize(allrecs)
     manifest.update({"built_at": datetime.now(UTC).isoformat(timespec="seconds"), "config": config})
-    (out / "manifest.json").write_text(json.dumps(manifest, indent=2, default=str))
+    (out / "manifest.json").write_text(json.dumps(manifest, indent=2, default=str), encoding="utf-8")
     if manifest["leakage"]:
         raise RuntimeError(f"paper-level leakage across splits: {list(manifest['leakage'])[:5]}")
     log(f"wrote {out / 'bench.jsonl'} ({len(allrecs)} records)")

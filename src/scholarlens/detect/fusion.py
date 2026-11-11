@@ -104,14 +104,14 @@ class FusionDetector:
         path = Path(path)
         path.mkdir(parents=True, exist_ok=True)
         joblib.dump(self.model, path / "model.joblib")
-        (path / "meta.json").write_text(json.dumps({"feature_names": self.feature_names, **self.train_info}, indent=2))
+        (path / "meta.json").write_text(json.dumps({"feature_names": self.feature_names, **self.train_info}, indent=2), encoding="utf-8")
 
     @classmethod
     def load(cls, path: str | Path, featurizer: Featurizer) -> FusionDetector:
         import joblib
 
         path = Path(path)
-        meta = json.loads((path / "meta.json").read_text())
+        meta = json.loads((path / "meta.json").read_text(encoding="utf-8"))
         det = cls(featurizer, estimator=meta.get("estimator", "hgb"), calibration=meta.get("calibration", "isotonic"))
         det.model = joblib.load(path / "model.joblib")
         det.feature_names = meta["feature_names"]

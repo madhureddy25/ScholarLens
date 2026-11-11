@@ -14,7 +14,7 @@ The steps below assume WSL2 Ubuntu (recommended). Native Windows works too: use 
 ```bash
 git clone https://github.com/madhureddy25/ScholarLens.git && cd ScholarLens
 python -m venv .venv && source .venv/bin/activate
-pip install torch --index-url https://download.pytorch.org/whl/cu124
+pip install torch --index-url https://download.pytorch.org/whl/cu126
 pip install -e ".[all,dev]" bitsandbytes
 python -c "import torch; print(torch.cuda.get_device_name(0))"     # NVIDIA GeForce RTX 3050 ...
 pytest -q -m "not slow"
@@ -50,13 +50,17 @@ scholarlens lens train data/bench/laptop-v1/bench.jsonl --out models/lens-v1 --g
 ## 5. DIPPER on Kaggle (free GPU)
 
 1. Zip `data/bench/laptop-v1` and upload it as a private Kaggle dataset.
-2. In a new notebook (Accelerator: GPU T4), run:
-   ```bash
-   !git clone https://github.com/madhureddy25/ScholarLens.git && cd ScholarLens && pip install -e ".[ml]" bitsandbytes datasets
-   !mkdir -p data/bench && cp -r /kaggle/input/<your-dataset>/laptop-v1 data/bench/
-   !cd ScholarLens && scholarlens bench build configs/bench.kaggle-dipper.toml
+2. Create a new notebook. In Settings, set Accelerator to **GPU T4** and turn **Internet on**. Add your dataset, then run these cells. Each `!` line runs in its own shell, so `%cd` is used to change directory:
    ```
-3. Download `data/bench/laptop-v1/transforms/dipper_*.jsonl` into the same folder on your laptop.
+   !git clone https://github.com/madhureddy25/ScholarLens.git
+   %cd /kaggle/working/ScholarLens
+   !pip install -q -e ".[ml]" bitsandbytes sentencepiece datasets
+   !ls /kaggle/input/*/
+   !mkdir -p data/bench && cp -r /kaggle/input/*/laptop-v1 data/bench/
+   !scholarlens bench build configs/bench.kaggle-dipper.toml
+   !mkdir -p /kaggle/working/dipper && cp data/bench/laptop-v1/transforms/dipper_*.jsonl /kaggle/working/dipper/
+   ```
+3. From the notebook's Output panel, download `dipper/dipper_L20_O0.jsonl` and `dipper/dipper_L60_O60.jsonl` into `data/bench/laptop-v1/transforms/` on your laptop.
 4. Rerun `scholarlens bench build configs/bench.laptop.toml` to merge everything.
 
 ## 6. Train Quill-RL

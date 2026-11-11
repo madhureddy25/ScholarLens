@@ -95,7 +95,7 @@ def _builtin() -> None:
         path = installed("quill") if model in ("", "latest") else Path(model)
         if path is None or not (path / "scholarlens_adapter.json").is_file():
             raise ModelConfigError("no Quill adapter installed: run `scholarlens update quill`")
-        card = _json.loads((path / "scholarlens_adapter.json").read_text())
+        card = _json.loads((path / "scholarlens_adapter.json").read_text(encoding="utf-8"))
         return hf(card["base_model"], adapter=str(path), **kw)
 
     for name, fac in (("anthropic", anthropic), ("claude", anthropic), ("hf", hf), ("local", hf),
@@ -128,7 +128,7 @@ def load_profiles(path: str | Path | None = None) -> tuple[dict[str, dict], str 
     """Return (profiles, default profile name) from the first config file found."""
     for p in _profile_paths(path):
         if p.is_file():
-            data = tomllib.loads(p.read_text())
+            data = tomllib.loads(p.read_text(encoding="utf-8"))
             return {k: dict(v) for k, v in data.get("models", {}).items()}, data.get("default")
     return {}, None
 

@@ -140,14 +140,14 @@ class GNNDetector:
         path.mkdir(parents=True, exist_ok=True)
         torch.save(self.net.state_dict(), path / "gnn.pt")
         d_in = self.net.l1.in_features
-        (path / "gnn.json").write_text(json.dumps({**self.cfg, "d_in": d_in}))
+        (path / "gnn.json").write_text(json.dumps({**self.cfg, "d_in": d_in}), encoding="utf-8")
 
     @classmethod
     def load(cls, path: str | Path, embedder) -> GNNDetector:
         import torch
 
         path = Path(path)
-        cfg = json.loads((path / "gnn.json").read_text())
+        cfg = json.loads((path / "gnn.json").read_text(encoding="utf-8"))
         d_in = cfg.pop("d_in")
         det = cls(embedder, **cfg)
         det.net = _model(d_in, cfg["hidden"], cfg["dropout"])

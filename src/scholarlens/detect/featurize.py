@@ -39,7 +39,7 @@ class Featurizer:
         self.drop = set(drop)
         self._cache: dict[str, dict[str, float]] = {}
         if self.cache_path and self.cache_path.is_file():
-            for line in self.cache_path.read_text().splitlines():
+            for line in self.cache_path.read_text(encoding="utf-8").splitlines():
                 if line.strip():
                     row = json.loads(line)
                     self._cache[row["key"]] = row["features"]
@@ -75,7 +75,7 @@ class Featurizer:
                 on_progress(i, len(items))
         if new and self.cache_path:
             self.cache_path.parent.mkdir(parents=True, exist_ok=True)
-            with self.cache_path.open("a") as f:
+            with self.cache_path.open("a", encoding="utf-8") as f:
                 for row in new:
                     f.write(json.dumps(row) + "\n")
         names = sorted({k for r in rows for k in r} - self.drop)
