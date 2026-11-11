@@ -101,6 +101,13 @@ def build(config: dict, *, log=print, load_model=None) -> dict:
                 log(f"  {t.name}: {i}/{len(todo)}")
         derived += list(read_jsonl(tpath)) if tpath.is_file() else []
 
+    # generated text is cleaned again at assembly (idempotent), so caches built before a
+    # cleaning fix are corrected too; human text is never altered here
+    from scholarlens.bench.generate import clean_generation
+
+    for r in ais + derived:
+        if r.label == LABEL_AI or r.transform in ("llm_paraphrase",):
+            r.text = clean_generation(r.text)
     allrecs = humans + ais + derived
     write_jsonl(allrecs, out / "bench.jsonl")
     manifest = summarize(allrecs)

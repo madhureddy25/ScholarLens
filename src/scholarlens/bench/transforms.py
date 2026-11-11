@@ -94,7 +94,9 @@ class LLMParaphraser:
             gen = self.model.generate(self.SYSTEM, [{"role": "user", "content": self.PROMPT.format(text=rec.text)}])
         except ModelError:
             return None
-        text = " ".join(gen.text.split())
+        from scholarlens.bench.generate import clean_generation
+
+        text = clean_generation(gen.text)
         if gen.refused or not text:
             return None
         return rec.derive(text, transform=self.name, transform_model=f"{gen.provider}:{gen.model}")

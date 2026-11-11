@@ -166,3 +166,18 @@ def test_build_end_to_end_and_resume(tmp_path):
     assert calls["n"] == before
     all_recs = list(read_jsonl(tmp_path / "out" / "bench.jsonl"))
     assert summarize(all_recs)["n_records"] == 65
+
+
+@pytest.mark.parametrize("raw,clean", [
+    ('"Our study involves simulations. We find X."', "Our study involves simulations. We find X."),
+    ("**Abstract** This study investigates X.", "This study investigates X."),
+    ("Here is the paraphrase: The model works.", "The model works."),
+    ("Abstract: We show that **robust** methods work.", "We show that robust methods work."),
+    ("...In cosmologically evolving quasars, X.", "In cosmologically evolving quasars, X."),
+    ("We study X. Results are good.", "We study X. Results are good."),
+])
+def test_clean_generation_removes_format_artifacts(raw, clean):
+    from scholarlens.bench.generate import clean_generation
+
+    assert clean_generation(raw) == clean
+    assert clean_generation(clean_generation(raw)) == clean  # idempotent
