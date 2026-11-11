@@ -60,7 +60,7 @@ ScholarLens is one system with two products on a shared, integrity-preserving co
 | `llm/` | ✅ | Provider-neutral `ChatModel`; Anthropic (official SDK, refusal fallbacks), any OpenAI-compatible endpoint (OpenAI, Ollama, vLLM, LM Studio, OpenRouter, Groq, …), in-process Hugging Face; TOML profiles; plugin entry points |
 | `edit/` | ✅ | Quill engine (mask → generate → repair → verify → similarity gate → retry), LaTeX tracked changes, HTML review, disclosure manifest, `scholarlens edit` |
 | `edit/docx_writer.py` | ✅ | Edits written back into .docx as Word revision marks (w:ins / w:del) or applied; formatting runs and citation fields untouched |
-| `api/` | ⏳ M5 | FastAPI service + minimal web UI |
+| `api/` | ✅ | FastAPI service (`/v1/parse`, `/v1/mask`, `/v1/edit`, `/v1/detect`), server-side model allowlist, size limits, Dockerfile |
 
 ## Changes relative to the original blueprint
 
@@ -108,5 +108,5 @@ Quill uses each backend's fixed, conservative settings (low temperature where a 
 | M2 | Bench data builder + metrics | ✅ |
 | M3 | Lens detectors + robustness study | ✅ code · study needs strong generators |
 | M4 | Quill editor + tracked changes + disclosure | ✅ |
-| M5 | API, web UI, docs | |
+| M5 | API, web UI, docs | API ✅ · web UI next |
 | M6 | Paper write-up | |

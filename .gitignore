@@ -13,3 +13,4 @@ runs/
 *.zip
 *_quill/
 scholarlens.toml
+models/

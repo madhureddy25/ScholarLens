@@ -298,5 +298,13 @@ def detect(path: Path, model: Path = typer.Option(Path("models/lens"), help="Dir
                   "not a verdict. Never use them alone to make decisions about an author.[/]")
 
 
+@app.command()
+def serve(host: str = "127.0.0.1", port: int = 8000) -> None:
+    """Run the HTTP API (see scholarlens.api.app for configuration)."""
+    import uvicorn
+
+    uvicorn.run("scholarlens.api.app:app", host=host, port=port)
+
+
 if __name__ == "__main__":
     app()
