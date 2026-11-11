@@ -169,7 +169,7 @@ def test_write_outputs(tmp_path):
     doc = load(FIX / "sample_paper.tex")
     session = Quill(ScriptedModel(_rewrite)).edit_document(doc)
     files = write_outputs(session, tmp_path, input_path=FIX / "sample_paper.tex")
-    assert set(files) == {"edited", "tracked", "disclosure", "review"}
+    assert set(files) == {"edited", "tracked", "disclosure", "review", "session"}
     manifest = json.loads(files["disclosure"].read_text())
     assert manifest["summary"]["accepted"] == 2 and manifest["model"]["provider"] == "scripted"
     assert manifest["input"]["sha256"] and manifest["output"]["sha256"]
