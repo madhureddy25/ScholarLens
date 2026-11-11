@@ -1,0 +1,70 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\title{Structure-Aware Detection of Machine-Generated Scientific Prose}
+\author{A. Researcher}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Large language models (LLMs) are increasingly used in scientific writing~\cite{kobak2024}.
+We study whether detectors remain reliable after paraphrasing, reporting an AUROC of 0.91.
+\end{abstract}
+
+\section{Introduction}
+Detecting machine-generated text matters for peer review \citep{liang2024,krishna2023}.
+Prior work showed that paraphrasing with DIPPER reduces DetectGPT accuracy from 70.3\% to 4.6\%
+\citep[see][p.~4]{krishna2023}. % TODO: double-check this number
+Our method builds on Fast-DetectGPT~\cite{bao2024} and the transition graph in Fig.~\ref{fig:overview}.
+
+We evaluate on 12,000 abstracts from \textit{arXiv} and \emph{PubMed}, where the
+probability $p(x_i \mid x_{<i})$ is computed with GPT-2. Schr\"odinger-style notation is avoided.
+
+\subsection{Contributions}
+\begin{itemize}
+  \item A benchmark of human, AI and AI-paraphrased abstracts (Section~\ref{sec:data}).
+  \item A detector that is robust to paraphrase attacks:
+  \begin{enumerate}
+    \item statistical features, and
+    \item sentence-transition graph features.
+  \end{enumerate}
+\end{itemize}
+
+\section{Method}\label{sec:method}
+The score is defined in Eq.~\eqref{eq:score}:
+\begin{equation}
+  S(x) = \frac{\log p(x) - \tilde{\mu}}{\tilde{\sigma}} \label{eq:score}
+\end{equation}
+where $\tilde{\mu}$ and $\tilde{\sigma}$ are analytic estimates.
+\[ B = \frac{\sigma_L - \mu_L}{\sigma_L + \mu_L} \]
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{overview.pdf}
+  \caption{Overview of the pipeline. Prose is masked before scoring~\cite{bao2024}.}
+  \label{fig:overview}
+\end{figure}
+
+\begin{table}[h]
+  \caption{Detection results (AUROC).}
+  \begin{tabular}{lc}
+    Method & AUROC \\
+    Ours & 0.91 \\
+  \end{tabular}
+\end{table}
+
+\begin{verbatim}
+def score(x): return {x: 1}  # stray } braces { here
+\end{verbatim}
+
+\begin{theorem}
+Every bounded sequence has a convergent subsequence.
+\end{theorem}
+
+\section{Conclusion}
+Detectors must be evaluated under realistic attacks.
+
+\bibliographystyle{plain}
+\bibliography{refs}
+\end{document}
