@@ -152,3 +152,16 @@ def test_openai_requires_key_but_local_servers_do_not(monkeypatch):
     with pytest.raises(ModelConfigError, match="OPENAI_API_KEY"):
         OpenAICompatibleModel("m", provider="openai")
     assert OpenAICompatibleModel("llama3.1", provider="ollama").client is not None
+
+
+def test_registering_before_first_load_keeps_builtins(monkeypatch):
+    """Regression: a provider registered before any load must not hide the built-ins."""
+    from scholarlens.llm import registry
+
+    monkeypatch.setattr(registry, "_PROVIDERS", {})
+    monkeypatch.setattr(registry, "_BUILTINS_LOADED", False)
+    register_provider("early", lambda model, **kw: ScriptedModel(["x"], model=model))
+    provs = available_providers()
+    assert "early" in provs and "anthropic" in provs and "ollama" in provs
+    register_provider("echo", lambda model, **kw: ScriptedModel(["override"], model="o"))
+    assert load_model("echo").generate("s", [{"role": "user", "content": "q"}]).text == "override"

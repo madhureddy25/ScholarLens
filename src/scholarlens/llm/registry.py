@@ -39,15 +39,20 @@ from scholarlens.llm.base import ChatModel, ModelConfigError
 
 Factory = Callable[..., ChatModel]
 _PROVIDERS: dict[str, Factory] = {}
+_BUILTINS_LOADED = False
 
 
 def register_provider(name: str, factory: Factory) -> None:
+    """Add or replace a provider. Safe to call before or after built-ins are loaded."""
     _PROVIDERS[name.lower()] = factory
 
 
 def _builtin() -> None:
-    if _PROVIDERS:
+    global _BUILTINS_LOADED
+    if _BUILTINS_LOADED:
         return
+    _BUILTINS_LOADED = True
+    user_registered = dict(_PROVIDERS)  # providers registered earlier keep precedence
 
     def anthropic(model, **kw):
         from scholarlens.llm.anthropic_backend import AnthropicModel
@@ -91,6 +96,7 @@ def _builtin() -> None:
             register_provider(ep.name, ep.load())
         except Exception:  # a broken plugin must not break built-in providers
             continue
+    _PROVIDERS.update(user_registered)
 
 
 def available_providers() -> list[str]:
