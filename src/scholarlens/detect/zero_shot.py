@@ -31,12 +31,14 @@ def baseline_scores(X: np.ndarray, names: list[str]) -> dict[str, np.ndarray]:
 class Binoculars:
     name = "binoculars"
 
-    def __init__(self, observer: str = "gpt2", performer: str = "distilgpt2", device: str = "cpu",
+    def __init__(self, observer: str = "gpt2", performer: str = "distilgpt2", device: str | None = None,
                  max_length: int = 1024) -> None:
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
+        from scholarlens._hub import default_device
 
+        device = device or default_device()
         self.torch, self.device, self.max_length = torch, device, max_length
         self.tok = AutoTokenizer.from_pretrained(observer)
         if AutoTokenizer.from_pretrained(performer).get_vocab() != self.tok.get_vocab():

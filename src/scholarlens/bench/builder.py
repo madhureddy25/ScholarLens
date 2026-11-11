@@ -12,13 +12,14 @@ Steps, each cached to the output directory so an interrupted build resumes:
 from __future__ import annotations
 
 import json
+import random
 import tomllib
 from collections import Counter
 from datetime import UTC, datetime
 from itertools import islice
 from pathlib import Path
 
-from scholarlens.bench.generate import generate_all
+from scholarlens.bench.generate import generate_counterpart
 from scholarlens.bench.schema import LABEL_AI, LABEL_HUMAN, Record, read_jsonl, write_jsonl
 from scholarlens.bench.sources import Filters, make_source
 from scholarlens.bench.splits import assign_splits, leakage
@@ -59,18 +60,24 @@ def build(config: dict, *, log=print, load_model=None) -> dict:
         write_jsonl(humans, human_path)
     log(f"human: {len(humans)}")
 
-    # 2. AI counterparts (appended record by record, so an interrupted build resumes)
+    # 2. AI counterparts — one generator loaded at a time (fits a single GPU), each record's
+    #    generator and prompt style fixed by its position, written as produced (resumable)
     ai_path = out / "ai.jsonl"
     ais = _cached(ai_path) or []
     done = {r.parent_id for r in ais}
-    todo = [h for h in humans if h.id not in done]
-    if todo:
-        gens = config.get("generators", [])
-        if not gens:
-            raise ValueError("config needs at least one [[generators]] entry")
-        models = [load_model(g["model"], **g.get("options", {})) for g in gens]
-        styles = tuple(b.get("prompt_styles", ["title"]))
-        log(f"generating {len(todo)} AI counterparts ({len(ais)} cached)")
+    gens = config.get("generators", [])
+    if not gens:
+        raise ValueError("config needs at least one [[generators]] entry")
+    styles = tuple(b.get("prompt_styles", ["title"]))
+    rng = random.Random(seed)
+    plan = [(i % len(gens), rng.choice(styles), h) for i, h in enumerate(humans)]
+    for gi, g in enumerate(gens):
+        jobs = [(h, st) for k, st, h in plan if k == gi and h.id not in done]
+        if not jobs:
+            continue
+        log(f"generator {g['model']}: {len(jobs)} to generate ({len(ais)} cached overall)")
+        model = load_model(g["model"], **g.get("options", {}))
+        concurrency = int(g.get("concurrency", b.get("concurrency", 1)))
 
         def keep(k, n, rec):
             if rec is not None:
@@ -79,8 +86,9 @@ def build(config: dict, *, log=print, load_model=None) -> dict:
             if k % 25 == 0 or k == n:
                 log(f"  generated {k}/{n}")
 
-        generate_all(todo, models, styles=styles, seed=seed + len(done), max_tokens=int(b.get("max_tokens", 2048)),
-                     on_progress=keep)
+        _run_jobs(jobs, model, max_tokens=int(b.get("max_tokens", 2048)), concurrency=concurrency, on_progress=keep)
+        del model
+        _release_gpu()
     log(f"ai: {len(ais)}")
 
     # 3. transforms (resumable per record)
@@ -93,12 +101,21 @@ def build(config: dict, *, log=print, load_model=None) -> dict:
         limit = spec.get("limit")
         todo = [r for r in pool if r.id not in done][: (int(limit) - len(done)) if limit else None]
         log(f"transform {t.name} on {t.apply_to}: {len(done)} cached, {len(todo)} to do")
-        for i, rec in enumerate(todo, 1):
-            res = t.apply(rec)
+        workers = int(spec.get("concurrency", b.get("concurrency", 1))) if spec["type"] in ("llm_paraphrase", "quill") else 1
+        if workers <= 1:
+            results = (t.apply(rec) for rec in todo)
+        else:
+            from concurrent.futures import ThreadPoolExecutor
+
+            pool = ThreadPoolExecutor(max_workers=workers)
+            results = pool.map(t.apply, todo)
+        for i, res in enumerate(results, 1):
             if res is not None:
                 write_jsonl([res], tpath, append=True)
             if i % 25 == 0:
                 log(f"  {t.name}: {i}/{len(todo)}")
+        del t
+        _release_gpu()
         derived += list(read_jsonl(tpath)) if tpath.is_file() else []
 
     # generated text is cleaned again at assembly (idempotent), so caches built before a
@@ -117,6 +134,32 @@ def build(config: dict, *, log=print, load_model=None) -> dict:
         raise RuntimeError(f"paper-level leakage across splits: {list(manifest['leakage'])[:5]}")
     log(f"wrote {out / 'bench.jsonl'} ({len(allrecs)} records)")
     return manifest
+
+
+def _run_jobs(jobs, model, *, max_tokens: int, concurrency: int, on_progress) -> None:
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    if concurrency <= 1:
+        for k, (h, st) in enumerate(jobs, 1):
+            on_progress(k, len(jobs), generate_counterpart(h, model, style=st, max_tokens=max_tokens))
+        return
+    with ThreadPoolExecutor(max_workers=concurrency) as pool:
+        futs = [pool.submit(generate_counterpart, h, model, style=st, max_tokens=max_tokens) for h, st in jobs]
+        for k, f in enumerate(as_completed(futs), 1):
+            on_progress(k, len(jobs), f.result())
+
+
+def _release_gpu() -> None:
+    import gc
+
+    gc.collect()
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except ImportError:
+        pass
 
 
 def summarize(records: list[Record]) -> dict:

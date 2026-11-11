@@ -23,10 +23,13 @@ class HFLocalModel(ChatModel):
         except ImportError as e:  # pragma: no cover
             raise ModelConfigError("pip install 'scholarlens[ml]'") from e
         self.torch = torch
-        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        from scholarlens._hub import default_device
+
+        self.device = device or default_device()
         self.temperature, self.top_p, self.max_tokens = temperature, top_p, max_tokens
         self.tok = AutoTokenizer.from_pretrained(model)
-        self.lm = AutoModelForCausalLM.from_pretrained(model, dtype=dtype).to(self.device).eval()
+        torch_dtype = dtype if dtype == "auto" else getattr(torch, str(dtype))  # "bfloat16" → torch.bfloat16
+        self.lm = AutoModelForCausalLM.from_pretrained(model, dtype=torch_dtype).to(self.device).eval()
         if self.tok.chat_template is None:
             raise ModelConfigError(f"{model} has no chat template; use an instruct/chat checkpoint")
 

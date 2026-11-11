@@ -86,6 +86,8 @@ scholarlens detect paper.tex --model models/lens       # per-segment calibrated 
 
 The second table is the fairness result: it shows whether honest authors who edit their writing get flagged.
 
+**Running on your own GPU:** follow [`docs/GPU.md`](docs/GPU.md) with `configs/bench.gpu.toml` (three open 7B generators, DIPPER, LLM paraphrase, Quill edits).
+
 Builds are resumable and every step is cached. `configs/bench.pilot-cpu.toml` runs fully offline with small local models (an easy pilot); the real study should use several strong generators (see `configs/bench.example.toml`). DIPPER attacks need a GPU.
 
 ## Python

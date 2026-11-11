@@ -49,11 +49,12 @@ class SentenceTransformerEmbedder:
     """Semantic embedder. Good defaults: ``sentence-transformers/all-MiniLM-L6-v2``
     (fast, general) or ``sentence-transformers/allenai-specter`` (scientific)."""
 
-    def __init__(self, model: str = "sentence-transformers/all-MiniLM-L6-v2", device: str = "cpu") -> None:
+    def __init__(self, model: str = "sentence-transformers/all-MiniLM-L6-v2", device: str | None = None) -> None:
         from sentence_transformers import SentenceTransformer
 
+        from scholarlens._hub import default_device
 
-        self.model = SentenceTransformer(model, device=device)
+        self.model = SentenceTransformer(model, device=device or default_device())
         self.name = model
 
     def encode(self, sentences: list[str]) -> np.ndarray:

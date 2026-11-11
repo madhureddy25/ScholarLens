@@ -18,9 +18,12 @@ from scholarlens.features.stylometry import stylometric_features
 from scholarlens.features.transitions import HashingEmbedder, transition_features
 from scholarlens.masking import Masker
 
-# Features that encode length rather than style; excluded so the classifier
-# cannot shortcut on "AI abstracts are shorter/longer".
-LENGTH_FEATURES = {"n_sentences", "n_words", "log_n_words", "lm_n_tokens"}
+# Features that encode length, or depend on it mechanically, rather than style.
+# Excluded so the classifier cannot shortcut on "AI abstracts are shorter/longer".
+# Raw TTR and hapax ratio fall with text length; MATTR measures the same lexical
+# diversity without that dependence and is kept. (Found in the CPU pilot, where
+# TTR/hapax were the top features while generated abstracts were ~20% shorter.)
+LENGTH_FEATURES = {"n_sentences", "n_words", "log_n_words", "lm_n_tokens", "ttr", "hapax_ratio"}
 
 
 def normalize(text: str, fmt: str = "text") -> str:

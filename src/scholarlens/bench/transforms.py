@@ -36,13 +36,14 @@ class DipperParaphraser:
 
     def __init__(self, lex: int = 60, order: int = 60, *, model: str = "kalpeshk2011/dipper-paraphraser-xxl",
                  tokenizer: str = "google/t5-v1_1-xxl", device: str = "cuda", sent_interval: int = 3,
-                 top_p: float = 0.75, apply_to: str = "ai") -> None:
+                 top_p: float = 0.75, apply_to: str = "ai", load_in_8bit: bool = False) -> None:
         if lex not in range(0, 101, 20) or order not in range(0, 101, 20):
             raise ValueError("lex and order must be multiples of 20 in [0, 100]")
         self.lex, self.order, self.sent_interval, self.top_p = lex, order, sent_interval, top_p
         self.name = f"dipper_L{lex}_O{order}"
         self.model_name, self.apply_to = model, apply_to
         self._model_id, self._tok_id, self.device = model, tokenizer, device
+        self.load_in_8bit = load_in_8bit  # ~12 GB instead of ~23 GB in bf16 (needs bitsandbytes)
         self._model = None
 
     def _load(self):
@@ -53,8 +54,14 @@ class DipperParaphraser:
 
             self.torch = torch
             self.tok = T5Tokenizer.from_pretrained(self._tok_id)
-            dtype = torch.bfloat16 if self.device.startswith("cuda") else torch.float32
-            self._model = T5ForConditionalGeneration.from_pretrained(self._model_id, dtype=dtype).to(self.device).eval()
+            if self.load_in_8bit:
+                from transformers import BitsAndBytesConfig
+
+                self._model = T5ForConditionalGeneration.from_pretrained(
+                    self._model_id, quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto").eval()
+            else:
+                dtype = torch.bfloat16 if self.device.startswith("cuda") else torch.float32
+                self._model = T5ForConditionalGeneration.from_pretrained(self._model_id, dtype=dtype).to(self.device).eval()
 
     def paraphrase(self, text: str) -> str:
         self._load()

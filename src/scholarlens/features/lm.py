@@ -40,15 +40,16 @@ class LMStats:
 
 
 class CausalLMScorer:
-    def __init__(self, model_name: str = "gpt2", device: str = "cpu", max_length: int = 1024,
+    def __init__(self, model_name: str = "gpt2", device: str | None = None, max_length: int = 1024,
                  stride: int = 512, entropy_window: int = 16) -> None:
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
+        from scholarlens._hub import default_device
 
         self.torch = torch
         self.model_name = model_name
-        self.device = device
+        self.device = device = device or default_device()
         self.tok = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForCausalLM.from_pretrained(model_name).to(device).eval()
         self.max_length = min(max_length, getattr(self.model.config, "max_position_embeddings", max_length))

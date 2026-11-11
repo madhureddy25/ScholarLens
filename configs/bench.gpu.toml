@@ -1,0 +1,91 @@
+# Full study on one local NVIDIA GPU (see docs/GPU.md).
+# Tested sizing: 24 GB VRAM (RTX 3090/4090, A5000, L4 has 24 GB too). For 12–16 GB, see the notes inline.
+#
+#   scholarlens bench build configs/bench.gpu.toml --n-human 40 --out data/bench/gpu-smoke   # 10-minute smoke test
+#   scholarlens bench build configs/bench.gpu.toml                                           # full run (overnight)
+
+[bench]
+out = "data/bench/gpu-v1"
+seed = 13
+n_human = 2000                # ~2000 papers → ~1600 train / 200 val / 200 test
+before_year = 2022
+min_words = 100
+max_words = 300
+max_tokens = 600
+prompt_styles = ["title", "title_first_sentence"]
+splits = { train = 0.8, val = 0.1, test = 0.1 }
+
+[[sources]]
+type = "arxiv"
+
+# ---------------------------------------------------------------- generators
+# Loaded one at a time, so each only needs to fit on the GPU by itself.
+# All three are open checkpoints (no Hugging Face login needed). 7–8B in bf16 ≈ 15–17 GB.
+# On a 12–16 GB card, replace the 7B models with Qwen/Qwen2.5-3B-Instruct and
+# microsoft/Phi-3.5-mini-instruct, or add  load_in_4bit  via a local vLLM/Ollama server instead.
+
+[[generators]]
+model = "hf:Qwen/Qwen2.5-7B-Instruct"
+options = { temperature = 0.7, top_p = 0.95, max_tokens = 600, dtype = "bfloat16" }
+
+[[generators]]
+model = "hf:allenai/OLMo-2-1124-7B-Instruct"
+options = { temperature = 0.7, top_p = 0.95, max_tokens = 600, dtype = "bfloat16" }
+
+[[generators]]
+model = "hf:microsoft/Phi-3.5-mini-instruct"
+options = { temperature = 0.7, top_p = 0.95, max_tokens = 600, dtype = "bfloat16" }
+
+# Gated models need `huggingface-cli login` and accepting the licence on the model page:
+# [[generators]]
+# model = "hf:meta-llama/Llama-3.1-8B-Instruct"
+# options = { temperature = 0.7, top_p = 0.95, max_tokens = 600, dtype = "bfloat16" }
+
+# A hosted model adds a fourth, stronger family (needs ANTHROPIC_API_KEY; runs 8 requests at a time):
+# [[generators]]
+# model = "anthropic:claude-sonnet-5-5"
+# options = { effort = "low" }
+# concurrency = 8
+
+# ------------------------------------------------------ attacks on AI text
+# DIPPER (T5-XXL, 11B): ~23 GB in bf16. On a 12–16 GB card set load_in_8bit = true (pip install bitsandbytes).
+[[transforms]]
+type = "dipper"
+lex = 20
+order = 0
+limit = 600
+
+[[transforms]]
+type = "dipper"
+lex = 60
+order = 60
+limit = 600
+
+[[transforms]]
+type = "llm_paraphrase"
+model = "hf:Qwen/Qwen2.5-7B-Instruct"
+apply_to = "ai"
+limit = 600
+
+# ------------------------------------- legitimate edits of human text (fairness)
+[[transforms]]
+type = "quill"
+mode = "proofread"
+model = "hf:Qwen/Qwen2.5-7B-Instruct"
+apply_to = "human"
+similarity_model = "sentence-transformers/all-MiniLM-L6-v2"
+limit = 600
+
+[[transforms]]
+type = "quill"
+mode = "clarity"
+model = "hf:Qwen/Qwen2.5-7B-Instruct"
+apply_to = "human"
+similarity_model = "sentence-transformers/all-MiniLM-L6-v2"
+limit = 600
+
+# Rule-based grammar fixing, if you run LanguageTool locally (docker run -p 8010:8010 erikvl87/languagetool):
+# [[transforms]]
+# type = "languagetool"
+# url = "http://localhost:8010"
+# limit = 600

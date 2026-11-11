@@ -74,15 +74,32 @@ def generate_counterpart(human: Record, model: ChatModel, *, style: str = "title
 
 
 def generate_all(humans: list[Record], models: list[ChatModel], *, styles: tuple[str, ...] = ("title",),
-                 seed: int = 13, max_tokens: int = 2048, on_progress=None) -> list[Record]:
-    """One AI counterpart per human record, round-robin over generators and prompt styles."""
+                 seed: int = 13, max_tokens: int = 2048, concurrency: int = 1, on_progress=None) -> list[Record]:
+    """One AI counterpart per human record, round-robin over generators and prompt styles.
+
+    ``concurrency`` > 1 sends requests in parallel (useful for API providers and vLLM/Ollama
+    servers, which batch concurrent requests on the GPU). Assignment of generator and prompt
+    style to each record is deterministic regardless of concurrency.
+    """
     rng = random.Random(seed)
+    jobs = [(h, models[i % len(models)], rng.choice(styles)) for i, h in enumerate(humans)]
     out: list[Record] = []
-    for i, h in enumerate(humans):
-        model = models[i % len(models)]
-        rec = generate_counterpart(h, model, style=rng.choice(styles), max_tokens=max_tokens)
-        if rec is not None:
-            out.append(rec)
-        if on_progress:
-            on_progress(i + 1, len(humans), rec)
+    if concurrency <= 1:
+        for k, (h, m, st) in enumerate(jobs, 1):
+            rec = generate_counterpart(h, m, style=st, max_tokens=max_tokens)
+            if rec is not None:
+                out.append(rec)
+            if on_progress:
+                on_progress(k, len(jobs), rec)
+        return out
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    with ThreadPoolExecutor(max_workers=concurrency) as pool:
+        futures = [pool.submit(generate_counterpart, h, m, style=st, max_tokens=max_tokens) for h, m, st in jobs]
+        for k, fut in enumerate(as_completed(futures), 1):
+            rec = fut.result()
+            if rec is not None:
+                out.append(rec)
+            if on_progress:
+                on_progress(k, len(jobs), rec)
     return out
