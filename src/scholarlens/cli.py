@@ -270,10 +270,17 @@ def lens_train(
 
 
 @app.command()
-def detect(path: Path, model: Path = typer.Option(Path("models/lens"), help="Directory from `lens train`."),
+def detect(path: Path, model: Path = typer.Option(None, help="Directory from `lens train` (default: installed release)."),
            segment_size: int = 250) -> None:
     """Score a manuscript with a trained Lens model (per ~250-word segment)."""
     import json as _json
+
+    from scholarlens.learn.release import installed
+
+    model = model or installed("lens") or Path("models/lens")
+    if not (model / "fusion" / "meta.json").is_file():
+        console.print("no Lens model found: run `scholarlens update lens` or `scholarlens lens train`")
+        raise typer.Exit(1)
 
     from scholarlens.analysis import prose_units, segments
     from scholarlens.detect import load_featurizer_from_signature
@@ -443,6 +450,75 @@ def learn_quill(
         console.print(f"[green]accepted[/]: publish with `scholarlens learn publish quill {out}`")
     else:
         console.print(f"[yellow]not accepted[/]: {'; '.join(rep['reasons'])}")
+
+
+@learn_app.command("lens")
+def learn_lens(
+    bench: Path = typer.Option(..., help="Base bench.jsonl (its test split is the frozen yardstick)."),
+    repo_dir: Path = typer.Option(Path("."), help="Repository checkout containing contributions/."),
+    current: Path = typer.Option(None, help="Current Lens directory (default: the installed release, if any)."),
+    out: Path = typer.Option(Path("models/lens-candidate")),
+    lm: str = typer.Option("gpt2"),
+    embedder: str = typer.Option("sentence-transformers/all-MiniLM-L6-v2"),
+) -> None:
+    """Retrain Lens with contributions and hard examples; accept only if it beats the current version."""
+    from scholarlens.detect.featurize import Featurizer
+    from scholarlens.features.lm import CausalLMScorer
+    from scholarlens.features.transitions import SentenceTransformerEmbedder
+    from scholarlens.learn.lens import improve_lens
+    from scholarlens.learn.release import installed
+
+    featurizer = Featurizer(lm=CausalLMScorer(lm) if lm != "none" else None,
+                            embedder=SentenceTransformerEmbedder(embedder), cache=out / "features.jsonl")
+    rep = improve_lens(bench=bench, repo_dir=repo_dir, out_dir=out, featurizer=featurizer,
+                       current_dir=current or installed("lens"), log=lambda m: console.print(m, highlight=False))
+    t = Table(title="Lens candidate vs current (frozen test split)")
+    for col in ("family", "current AUROC", "candidate AUROC"):
+        t.add_column(col)
+    for fam, row in rep["candidate"]["attacks"].items():
+        cur = rep["current"]["attacks"].get(fam, {}).get("auroc") if rep["current"] else None
+        t.add_row(fam, "—" if cur is None else f"{cur:.4f}", f"{row['auroc']:.4f}")
+    console.print(t)
+    if rep["accepted"]:
+        console.print(f"[green]accepted[/]: publish with `scholarlens learn publish lens {out}`")
+    else:
+        console.print(f"[yellow]not accepted[/]: {'; '.join(rep['reasons'])}")
+        raise typer.Exit(3)
+
+
+@learn_app.command("validate")
+def learn_validate(repo_dir: Path = typer.Option(Path(".")),
+                   strict: bool = typer.Option(False, help="Exit non-zero if any entry is invalid (for PR checks).")) -> None:
+    """Check contribution files (schema, placeholders, personal data, duplicates)."""
+    from scholarlens.learn.contribute import load_contributions
+
+    entries, notes = load_contributions(repo_dir)
+    console.print(f"{len(entries)} valid contribution entries")
+    for n in notes:
+        console.print(f"  [yellow]invalid[/] {n}")
+    if strict and notes:
+        raise typer.Exit(1)
+
+
+@learn_app.command("publish")
+def learn_publish(kind: str, directory: Path, force: bool = typer.Option(False, help="Publish even if not accepted.")) -> None:
+    """Publish a model (lens | quill) or benchmark (bench) directory as a GitHub Release (needs `gh auth login`)."""
+    from scholarlens.learn.release import publish
+
+    console.print(f"[green]published[/] {publish(kind, directory, force=force)}")
+
+
+@app.command()
+def update(kind: str = typer.Argument("all", help="lens | quill | all")) -> None:
+    """Install the latest community-improved Lens and/or Quill from GitHub Releases."""
+    from scholarlens.learn.release import install, latest_release
+
+    for k in (("lens", "quill") if kind == "all" else (kind,)):
+        rel = latest_release(k)
+        if rel is None:
+            console.print(f"{k}: no release yet")
+            continue
+        console.print(f"{k}: installed {rel['tag_name']} → {install(k, rel)}")
 
 
 if __name__ == "__main__":

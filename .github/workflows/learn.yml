@@ -1,0 +1,66 @@
+# Continuous learning for Lens: retrain on the base benchmark + merged community
+# contributions (+ hard examples), and publish a new release only if it beats the
+# current one on the frozen test split. Runs on CPU (GitHub-hosted runner).
+#
+# Quill-RL needs a GPU and is run by maintainers: `scholarlens learn quill ...` then
+# `scholarlens learn publish quill <dir>` (see docs/LEARNING.md).
+name: learn
+on:
+  push:
+    branches: [main]
+    paths: ["contributions/**"]
+  schedule:
+    - cron: "17 3 * * 1"   # weekly, Monday 03:17 UTC
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: learn
+  cancel-in-progress: false
+jobs:
+  lens:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SCHOLARLENS_REPO: ${{ github.repository }}
+      SCHOLARLENS_HOME: ${{ github.workspace }}/.scholarlens
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install (CPU)
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[ml]" scikit-learn networkx
+      - name: Validate contributions
+        run: scholarlens learn validate --repo-dir .
+      - name: Fetch base benchmark
+        id: bench
+        run: |
+          tag=$(gh release list --limit 200 --json tagName --jq '[.[].tagName | select(test("^bench-v[0-9]+$"))][0] // ""')
+          if [ -z "$tag" ]; then echo "No bench-vN release yet: publish one with 'scholarlens learn publish bench <dir>'"; echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          mkdir -p bench && gh release download "$tag" --dir bench --pattern '*.tar.gz' && tar -xzf bench/*.tar.gz -C bench
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+      - name: Install current Lens
+        if: steps.bench.outputs.ok == 'true'
+        run: scholarlens update lens || true
+      - name: Train and gate candidate
+        id: learn
+        if: steps.bench.outputs.ok == 'true'
+        run: |
+          set +e
+          scholarlens learn lens --bench bench/bench.jsonl --repo-dir . --out candidate
+          code=$?
+          if [ $code -eq 0 ]; then echo "accepted=true" >> "$GITHUB_OUTPUT"; elif [ $code -eq 3 ]; then echo "accepted=false" >> "$GITHUB_OUTPUT"; else exit $code; fi
+      - name: Publish accepted candidate
+        if: steps.learn.outputs.accepted == 'true'
+        run: scholarlens learn publish lens candidate
+      - name: Upload report
+        if: always() && steps.bench.outputs.ok == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lens-learn-report
+          path: candidate/learn_report.json
+          if-no-files-found: ignore

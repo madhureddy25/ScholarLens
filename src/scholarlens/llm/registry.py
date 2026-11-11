@@ -84,8 +84,22 @@ def _builtin() -> None:
 
         return make
 
+    def quill(model, **kw):
+        """The community-trained Quill adapter: ``quill:latest`` (installed by ``scholarlens update quill``)
+        or ``quill:<adapter directory>``."""
+        import json as _json
+        from pathlib import Path
+
+        from scholarlens.learn.release import installed
+
+        path = installed("quill") if model in ("", "latest") else Path(model)
+        if path is None or not (path / "scholarlens_adapter.json").is_file():
+            raise ModelConfigError("no Quill adapter installed: run `scholarlens update quill`")
+        card = _json.loads((path / "scholarlens_adapter.json").read_text())
+        return hf(card["base_model"], adapter=str(path), **kw)
+
     for name, fac in (("anthropic", anthropic), ("claude", anthropic), ("hf", hf), ("local", hf),
-                      ("scripted", scripted), ("echo", echo)):
+                      ("scripted", scripted), ("echo", echo), ("quill", quill)):
         register_provider(name, fac)
     from scholarlens.llm.openai_compat import PRESETS
 

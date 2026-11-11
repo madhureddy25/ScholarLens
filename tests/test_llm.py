@@ -165,3 +165,9 @@ def test_registering_before_first_load_keeps_builtins(monkeypatch):
     assert "early" in provs and "anthropic" in provs and "ollama" in provs
     register_provider("echo", lambda model, **kw: ScriptedModel(["override"], model="o"))
     assert load_model("echo").generate("s", [{"role": "user", "content": "q"}]).text == "override"
+
+
+def test_quill_provider_needs_installed_adapter(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCHOLARLENS_HOME", str(tmp_path))
+    with pytest.raises(ModelConfigError, match="scholarlens update quill"):
+        load_model("quill:latest")

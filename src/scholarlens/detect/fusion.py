@@ -49,11 +49,12 @@ class FusionDetector:
         return X, y, names
 
     def fit(self, train: list[Record], val: list[Record] | None = None, *, exclude_families: tuple[str, ...] = (),
-            on_progress=None) -> FusionDetector:
+            sample_weight: dict[str, float] | None = None, on_progress=None) -> FusionDetector:
         train = [r for r in train if r.family not in exclude_families]
         X, y, names = self._xy(train, on_progress)
         self.feature_names = names
-        base = _make_estimator(self.estimator_kind, self.seed).fit(X, y)
+        w = np.array([sample_weight.get(r.id, 1.0) for r in train]) if sample_weight else None
+        base = _make_estimator(self.estimator_kind, self.seed).fit(X, y, sample_weight=w)
         self.model = base
         if val and self.calibration:
             from sklearn.calibration import CalibratedClassifierCV

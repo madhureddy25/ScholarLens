@@ -101,3 +101,124 @@ def test_contribution_roundtrip_dedupes(tmp_path):
     (tmp_path / "contributions" / "evil.jsonl").write_text(json.dumps({**ENTRY, "masked_input": "x"}) + "\n")
     loaded, notes = load_contributions(tmp_path)
     assert len(loaded) == 1 and any("length" in n for n in notes)
+
+
+# ------------------------------------------------------------ Lens learning
+import io  # noqa: E402
+import random  # noqa: E402
+import tarfile  # noqa: E402
+
+from scholarlens.bench.schema import Record, write_jsonl  # noqa: E402
+from scholarlens.bench.splits import assign_splits  # noqa: E402
+from scholarlens.learn.lens import contribution_records, improve_lens, lens_gate  # noqa: E402
+from scholarlens.learn.release import install, latest_release, next_tag, package, publish, sha256  # noqa: E402
+
+
+def _bench(tmp_path, n=90):
+    rng = random.Random(0)
+    words = ["we", "the", "data", "results", "samples", "noise", "trend", "model", "field", "error", "rate", "site"]
+    recs = []
+    for i in range(n):
+        h = " ".join(" ".join(rng.choice(words) for _ in range(rng.choice([6, 11, 19, 28]))).capitalize() + "."
+                     for _ in range(rng.randint(4, 7)))
+        a = " ".join(f"{o}, this work delves into a comprehensive and pivotal framework for topic {i % 7}."
+                     for o in ("Furthermore", "Moreover", "Additionally", "Notably", "Overall"))
+        recs += [Record(id=f"h{i}", paper_id=f"p{i}", text=h, label="human", source="syn"),
+                 Record(id=f"a{i}", paper_id=f"p{i}", text=a, label="ai", source="syn", generator="g")]
+    path = tmp_path / "bench.jsonl"
+    write_jsonl(assign_splits(recs), path)
+    return path
+
+
+def test_lens_gate():
+    cur = {"attacks": {"ai": {"auroc": 0.95}, "ai+p": {"auroc": 0.80}}, "human_fpr": {"human": {"fpr": 0.01}}}
+    better = {"attacks": {"ai": {"auroc": 0.95}, "ai+p": {"auroc": 0.86}}, "human_fpr": {"human": {"fpr": 0.01}}}
+    assert lens_gate(better, cur)[0]
+    unfair = {**better, "human_fpr": {"human": {"fpr": 0.05}}}
+    ok, why = lens_gate(unfair, cur)
+    assert not ok and "false-positive" in why[0]
+    trade = {"attacks": {"ai": {"auroc": 0.90}, "ai+p": {"auroc": 0.99}}, "human_fpr": {"human": {"fpr": 0.0}}}
+    assert not lens_gate(trade, cur)[0]  # may not sacrifice one attack family for another
+
+
+def test_contribution_records_are_train_only_human():
+    recs = contribution_records([{**ENTRY, "id": "abc"}, {**ENTRY, "id": "def", "decision": "reject"}])
+    assert len(recs) == 2 and {r.split for r in recs} == {"train"} and {r.label for r in recs} == {"human"}
+    assert "⟦" not in recs[0].text and "[1]" in recs[0].text
+
+
+def test_improve_lens_rounds(tmp_path):
+    from scholarlens.detect.featurize import Featurizer
+
+    bench = _bench(tmp_path)
+    write_contribution(prepare([ENTRY])[0], tmp_path / "repo")
+    r1 = improve_lens(bench=bench, repo_dir=tmp_path / "repo", out_dir=tmp_path / "v1", featurizer=Featurizer(),
+                      log=lambda *_: None)
+    assert r1["accepted"] and r1["current"] is None and r1["n_contributions"] == 1
+    r2 = improve_lens(bench=bench, repo_dir=tmp_path / "repo", out_dir=tmp_path / "v2", featurizer=Featurizer(),
+                      current_dir=tmp_path / "v1", log=lambda *_: None)
+    assert r2["current"] is not None and isinstance(r2["accepted"], bool)
+    assert (tmp_path / "v2" / "fusion" / "model.joblib").is_file()
+
+
+# ---------------------------------------------------------------- releases
+def test_next_tag():
+    assert next_tag("lens", []) == "lens-v1"
+    assert next_tag("lens", ["lens-v1", "quill-v4", "lens-v3", "lens-vx"]) == "lens-v4"
+
+
+def test_package_and_publish_refuses_unaccepted(tmp_path):
+    d = tmp_path / "cand"
+    (d / "fusion").mkdir(parents=True)
+    (d / "fusion" / "model.joblib").write_bytes(b"m")
+    (d / "fusion" / "meta.json").write_text("{}")
+    (d / "features.jsonl").write_text("big cache")
+    (d / "learn_report.json").write_text(json.dumps({"accepted": False}))
+    archive = package("lens", d, tmp_path, "lens-v1")
+    assert sorted(tarfile.open(archive).getnames()) == ["fusion/meta.json", "fusion/model.joblib", "learn_report.json"]
+    calls = []
+
+    def runner(cmd, **kw):
+        calls.append(cmd)
+        return type("R", (), {"stdout": "lens-v1\nlens-v2\n"})()
+
+    with pytest.raises(ValueError, match="not mark this candidate as accepted"):
+        publish("lens", d, runner=runner)
+    (d / "learn_report.json").write_text(json.dumps({"accepted": True}))
+    assert publish("lens", d, runner=runner, repo="o/r") == "lens-v3"
+    create = calls[-1]
+    assert create[:4] == ["gh", "release", "create", "lens-v3"] and "sha256:" in create[create.index("--notes") + 1]
+
+
+def _release(tmp_path, files: dict[str, bytes], tag="lens-v2", corrupt=False):
+    archive = tmp_path / f"{tag}.tar.gz"
+    with tarfile.open(archive, "w:gz") as tar:
+        for name, data in files.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+    digest = "0" * 64 if corrupt else sha256(archive)
+    rel = {"tag_name": tag, "body": f"notes\n\nsha256: {digest}\n",
+           "assets": [{"name": archive.name, "browser_download_url": "https://example/x"}]}
+    return rel, lambda url, dest: dest.write_bytes(archive.read_bytes())
+
+
+def test_install_verifies_checksum_and_paths(tmp_path):
+    from scholarlens.learn.release import installed
+
+    rel, dl = _release(tmp_path, {"fusion/meta.json": b"{}", "fusion/model.joblib": b"x"})
+    dest = install("lens", rel, download=dl)
+    assert (dest / "fusion" / "meta.json").is_file() and installed("lens") == dest
+    rel, dl = _release(tmp_path, {"fusion/meta.json": b"{}"}, tag="lens-v3", corrupt=True)
+    with pytest.raises(ValueError, match="checksum"):
+        install("lens", rel, download=dl)
+    rel, dl = _release(tmp_path, {"../../evil.py": b"print('x')"}, tag="lens-v4")
+    with pytest.raises(ValueError, match="unsafe"):
+        install("lens", rel, download=dl)
+
+
+def test_latest_release_picks_newest_matching_tag():
+    rels = [{"tag_name": "quill-v2"}, {"tag_name": "lens-v5", "draft": True}, {"tag_name": "lens-v4"},
+            {"tag_name": "lens-v3"}]
+    assert latest_release("lens", fetch=lambda url: rels)["tag_name"] == "lens-v4"
+    assert latest_release("bench", fetch=lambda url: rels) is None
