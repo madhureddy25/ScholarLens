@@ -45,4 +45,4 @@ Before every push, run the **full** fast suite (not just the files you touched),
 
 ## Where things stand (Nov 2026)
 
-All milestones are implemented and tested (see PROJECT_LOG §2). Next: run the laptop study (`docs/WINDOWS.md` steps 1–5), publish `bench-v1`/`lens-v1`/`quill-v1`, then write the paper (`docs/PAPER_PLAN.md`).
+All milestones are implemented and tested (see PROJECT_LOG §2). Next: run the laptop study (`LAPTOP_COMMANDS.ps1`, details in `docs/WINDOWS.md`), publish `bench-v1`/`lens-v1`/`quill-v1`, then write the paper (`docs/PAPER_PLAN.md`).
