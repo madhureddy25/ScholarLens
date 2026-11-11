@@ -189,5 +189,46 @@ def edit(
         console.print(f"  {k:10} {f}")
 
 
+bench_app = typer.Typer(help="Bench: build and inspect detection benchmarks.")
+app.add_typer(bench_app, name="bench")
+
+
+@bench_app.command("build")
+def bench_build(config: Path, n_human: int = typer.Option(None, help="Override [bench].n_human."),
+                out: Path = typer.Option(None, help="Override [bench].out.")) -> None:
+    """Build (or resume) a benchmark from a TOML config."""
+    from scholarlens.bench.builder import build, load_config
+
+    cfg = load_config(config)
+    if n_human:
+        cfg["bench"]["n_human"] = n_human
+    if out:
+        cfg["bench"]["out"] = str(out)
+    manifest = build(cfg, log=lambda m: console.print(m, highlight=False))
+    _print_bench_table(manifest)
+
+
+@bench_app.command("stats")
+def bench_stats(path: Path) -> None:
+    """Counts per family × split for a bench.jsonl file."""
+    from scholarlens.bench.builder import summarize
+    from scholarlens.bench.schema import read_jsonl
+
+    _print_bench_table(summarize(list(read_jsonl(path))))
+
+
+def _print_bench_table(manifest: dict) -> None:
+    t = Table(title=f"{manifest['n_records']} records · {manifest['n_papers']} papers")
+    splits = sorted({s for row in manifest["by_family_and_split"].values() for s in row})
+    t.add_column("family")
+    for s in splits:
+        t.add_column(s, justify="right")
+    for fam, row in manifest["by_family_and_split"].items():
+        t.add_row(fam, *[str(row.get(s, 0)) for s in splits])
+    console.print(t)
+    console.print(f"generators: {manifest['generators']}")
+    console.print(f"leakage: {'[green]none[/]' if not manifest['leakage'] else '[red]' + str(manifest['leakage'])}")
+
+
 if __name__ == "__main__":
     app()

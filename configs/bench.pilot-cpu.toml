@@ -1,0 +1,36 @@
+# CPU-only pilot (no API keys): exercises the whole pipeline end to end.
+# Small local generators make an EASY benchmark; use configs/bench.example.toml with
+# strong models (Claude, Llama-3.x 70B, etc.) for the real study.
+[bench]
+out = "data/bench/pilot-cpu"
+seed = 13
+n_human = 120
+before_year = 2022
+min_words = 100
+max_words = 250
+max_tokens = 400
+prompt_styles = ["title", "title_first_sentence"]
+
+[[sources]]
+type = "arxiv"
+
+[[generators]]
+model = "hf:Qwen/Qwen2.5-0.5B-Instruct"
+options = { temperature = 0.7, top_p = 0.95 }
+
+[[generators]]
+model = "hf:HuggingFaceTB/SmolLM2-360M-Instruct"
+options = { temperature = 0.7, top_p = 0.95 }
+
+[[transforms]]
+type = "llm_paraphrase"
+model = "hf:Qwen/Qwen2.5-0.5B-Instruct"
+apply_to = "ai"
+limit = 60
+
+[[transforms]]
+type = "quill"
+mode = "proofread"
+model = "hf:Qwen/Qwen2.5-0.5B-Instruct"
+apply_to = "human"
+limit = 40

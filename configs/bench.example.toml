@@ -1,0 +1,59 @@
+# scholarlens bench build configs/bench.example.toml
+# Pilot benchmark: arXiv abstracts (pre-2022) vs. matched AI abstracts, with paraphrase
+# attacks on the AI side and legitimate edits on the human side.
+
+[bench]
+out = "data/bench/pilot"
+seed = 13
+n_human = 300
+before_year = 2022            # human text must predate widespread LLM writing
+min_words = 80
+max_words = 350
+prompt_styles = ["title", "title_first_sentence"]
+splits = { train = 0.8, val = 0.1, test = 0.1 }   # by paper, never by paragraph
+
+[[sources]]
+type = "arxiv"                # gfissore/arxiv-abstracts-2021 on Hugging Face
+
+# [[sources]]                 # your own S2ORC / PubMed Central export
+# type = "jsonl"
+# path = "data/raw/pmc_abstracts.jsonl"
+# text_field = "abstract"
+# year_field = "year"
+# domain_field = "journal"
+# limit = 300
+
+# Several generator families, so the detector cannot key on one model's style.
+[[generators]]
+model = "anthropic:claude-sonnet-5-5"
+options = { effort = "low" }
+
+[[generators]]
+model = "ollama:llama3.1"
+
+# --- attacks on AI text (robustness) ---
+[[transforms]]
+type = "llm_paraphrase"
+model = "ollama:llama3.1"
+apply_to = "ai"
+
+# DIPPER needs a GPU (T5-XXL). Uncomment on a GPU machine.
+# [[transforms]]
+# type = "dipper"
+# lex = 20
+# order = 20
+# [[transforms]]
+# type = "dipper"
+# lex = 60
+# order = 60
+
+# --- legitimate edits of human text (false-positive study) ---
+[[transforms]]
+type = "quill"
+mode = "proofread"
+model = "ollama:llama3.1"
+apply_to = "human"
+
+# [[transforms]]              # docker run -p 8010:8010 erikvl87/languagetool
+# type = "languagetool"
+# url = "http://localhost:8010"
