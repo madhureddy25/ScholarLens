@@ -13,6 +13,7 @@ Both share one core: a structure-aware document parser and a masking engine that
 | [`docs/PROJECT_LOG.md`](docs/PROJECT_LOG.md) | History, design decisions and their reasons, bugs and research findings, next steps |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System design, module map, evaluation targets, roadmap |
 | [`LAPTOP_COMMANDS.ps1`](LAPTOP_COMMANDS.ps1) | **Every command for the laptop study in one file**, in order |
+| [`docs/LAPTOP_COMMANDS.pdf`](docs/LAPTOP_COMMANDS.pdf) | The same 50 commands as a printable, numbered PDF |
 | [`docs/WINDOWS.md`](docs/WINDOWS.md) | Step-by-step PowerShell runbook for the study on a Windows laptop |
 | [`docs/LAPTOP.md`](docs/LAPTOP.md) / [`docs/GPU.md`](docs/GPU.md) | 6 GB laptop GPU / 24 GB GPU setups |
 | [`docs/LEARNING.md`](docs/LEARNING.md) | How the community learning loop works, and its guard rails |
