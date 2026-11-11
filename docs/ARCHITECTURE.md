@@ -55,11 +55,11 @@ ScholarLens is one system with two products on a shared, integrity-preserving co
 | `features/transitions.py` | ✅ | T(D), δ_ij, Var(T(D)) features, sentence-relation graph |
 | `features/lm.py` | ✅ | Sliding-window PPL, entropy dynamics, rank stats, Fast-DetectGPT |
 | `analysis.py` / `cli.py` | ✅ | Document → segments → features; `scholarlens parse/mask/roundtrip/features` |
-| `bench/` | ⏳ M2 | Dataset builder (human / AI / AI-paraphrased / human-edited), splits, metrics |
-| `detect/` | ⏳ M3 | Feature-fusion classifier, fine-tuned encoder, GNN on sentence graphs, retrieval defence, calibration |
+| `bench/` | ✅ | Pre-cutoff human sources, matched AI generation, attacks (DIPPER, LLM paraphrase), legitimate edits (Quill, LanguageTool), paper-level splits, metrics (AUROC, TPR@1%FPR, per-family FPR, ECE, bootstrap CIs) |
+| `detect/` | ✅ | Calibrated fusion classifier, zero-shot baselines (Fast-DetectGPT, PPL, Binoculars), retrieval defence, sentence-graph GCN, `lens train` reports |
 | `llm/` | ✅ | Provider-neutral `ChatModel`; Anthropic (official SDK, refusal fallbacks), any OpenAI-compatible endpoint (OpenAI, Ollama, vLLM, LM Studio, OpenRouter, Groq, …), in-process Hugging Face; TOML profiles; plugin entry points |
 | `edit/` | ✅ | Quill engine (mask → generate → repair → verify → similarity gate → retry), LaTeX tracked changes, HTML review, disclosure manifest, `scholarlens edit` |
-| `edit/` DOCX writer | ⏳ | Write accepted edits back into .docx as Word revision marks (w:ins / w:del) |
+| `edit/docx_writer.py` | ✅ | Edits written back into .docx as Word revision marks (w:ins / w:del) or applied; formatting runs and citation fields untouched |
 | `api/` | ⏳ M5 | FastAPI service + minimal web UI |
 
 ## Changes relative to the original blueprint
@@ -105,8 +105,8 @@ Quill uses each backend's fixed, conservative settings (low temperature where a 
 |---|---|---|
 | M0 | Repo, packaging, CI (GitHub Actions), tests | ✅ |
 | M1 | Shared core: ingestion (LaTeX/MD/TXT/DOCX/TEI) + masking + integrity verification + feature extraction | ✅ |
-| M2 | Bench data builder + metrics | next |
-| M3 | Lens detectors + robustness study | |
-| M4 | Quill editor + tracked changes + disclosure | ✅ (DOCX revision marks pending) |
+| M2 | Bench data builder + metrics | ✅ |
+| M3 | Lens detectors + robustness study | ✅ code · study needs strong generators |
+| M4 | Quill editor + tracked changes + disclosure | ✅ |
 | M5 | API, web UI, docs | |
 | M6 | Paper write-up | |

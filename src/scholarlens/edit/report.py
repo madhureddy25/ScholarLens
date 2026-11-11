@@ -90,7 +90,21 @@ def write_outputs(session: EditSession, out_dir: str | Path, *, input_path: str 
         tracked_path.write_text(add_latex_diff_preamble(doc.reconstruct(tracked)), encoding="utf-8")
         files["tracked"] = tracked_path
 
+    docx_result = None
+    if doc.source_format == "docx" and (input_path or doc.meta.get("path")):
+        from scholarlens.edit.docx_writer import write_docx
+
+        src = input_path or doc.meta["path"]
+        files["edited_text"] = edited_path
+        files["edited"] = out / f"{stem}.edited.docx"
+        files["tracked"] = out / f"{stem}.tracked.docx"
+        write_docx(session, src, files["edited"], tracked=False)
+        docx_result = write_docx(session, src, files["tracked"], tracked=True)
+        edited_path = files["edited"]
+
     manifest = build_manifest(session, input_path=input_path, output_path=edited_path)
+    if docx_result is not None:
+        manifest["docx"] = docx_result
     manifest_path = out / f"{stem}.disclosure.json"
     manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
     files["disclosure"] = manifest_path

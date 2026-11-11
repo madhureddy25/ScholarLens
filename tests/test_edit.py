@@ -202,3 +202,72 @@ def test_real_local_model_end_to_end():
     if e.status == Status.ACCEPTED:  # whatever the model did, protected items survived verbatim
         for item in ("Fast-DetectGPT", "[3]", "AUROC", "0.91", "12,000"):
             assert item in e.edited
+
+
+# ------------------------------------------------------------------- DOCX
+def _make_docx(path):
+    docx = pytest.importorskip("docx")
+    d = docx.Document()
+    d.add_heading("Methods", level=1)
+    p = d.add_paragraph("Cultures of ")
+    p.add_run("E. coli").italic = True
+    p.add_run(" was grown overnight at 37 °C in ")
+    p.add_run("rich medium and the cells was then ")  # second plain run: edits cross a run boundary
+    p.add_run("harvested for analysis [3].")
+    d.add_paragraph("A second paragraph that the editor leaves completely untouched here.")
+    d.save(path)
+
+
+def _docx_editor(user_msg):
+    text = extract_paragraph(user_msg)
+    return (text.replace("was grown overnight", "were grown overnight")
+                .replace("the cells was then", "the cells were then"))
+
+
+def test_docx_tracked_and_accepted_outputs(tmp_path):
+    from lxml import etree
+
+    from scholarlens.ingest.docx import W
+
+    src = tmp_path / "paper.docx"
+    _make_docx(src)
+    doc = load(src)
+    session = Quill(ScriptedModel(_docx_editor)).edit_document(doc)
+    target = next(e for e in session.edits if e.status == Status.ACCEPTED)
+    files = write_outputs(session, tmp_path / "out", input_path=src)
+    assert files["edited"].suffix == ".docx" and files["tracked"].suffix == ".docx"
+
+    accepted = load(files["edited"])
+    tracked = load(files["tracked"])  # parser skips w:del and keeps w:ins → the accepted view
+    for d in (accepted, tracked):
+        para = d.get(target.node_id)
+        assert para.text == target.edited
+        assert {(para.text[s["start"]:s["end"]], s["reason"]) for s in para.meta["protected"]} == {("E. coli", "italic")}
+        assert d.nodes[-1].text == doc.nodes[-1].text  # untouched paragraph
+
+    import zipfile
+    xml = etree.fromstring(zipfile.ZipFile(files["tracked"]).read("word/document.xml"))
+    ins, dels = xml.findall(f".//{W}ins"), xml.findall(f".//{W}del")
+    assert len(ins) == 2 and len(dels) == 2
+    assert all(el.get(f"{W}author") == "ScholarLens Quill" for el in ins + dels)
+    deleted = "".join(t.text for t in xml.iter(f"{W}delText"))
+    assert "was" in deleted
+    manifest = json.loads(files["disclosure"].read_text())
+    assert manifest["docx"]["written"] == [target.node_id] and manifest["docx"]["kept_original"] == []
+
+
+def test_docx_edit_that_moves_protected_item_keeps_original(tmp_path):
+    src = tmp_path / "paper.docx"
+    _make_docx(src)
+    doc = load(src)
+
+    def mover(user_msg):  # moves the italic species name: not representable as safe revisions
+        text = extract_paragraph(user_msg)
+        return text.replace("Cultures of ⟦PROT_1⟧", "Cultures").replace("the cells was then",
+                                                                         "the ⟦PROT_1⟧ cells were then")
+
+    session = Quill(ScriptedModel(mover)).edit_document(doc)
+    files = write_outputs(session, tmp_path / "out", input_path=src)
+    manifest = json.loads(files["disclosure"].read_text())
+    assert manifest["docx"]["written"] == [] and "moves a protected item" in manifest["docx"]["kept_original"][0]
+    assert load(files["edited"]).nodes[1].text == doc.nodes[1].text
