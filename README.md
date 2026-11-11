@@ -70,6 +70,24 @@ Any model can be plugged in. Use a spec string `provider:model`, or a named prof
 Pass model options with `--opt key=value` (e.g. `--opt effort=low`, `--opt temperature=0.2`). `scholarlens models` lists providers and profiles.
 To add your own backend, subclass `scholarlens.llm.ChatModel` and either call `register_provider("name", factory)` or expose it under the `scholarlens.providers` entry-point group in your package.
 
+## Bench and Lens: the robustness and fairness study
+
+```bash
+scholarlens bench build configs/bench.example.toml      # human (pre-2022) + matched AI + attacks + edits
+scholarlens bench stats data/bench/pilot/bench.jsonl    # counts per family × split, leakage check
+scholarlens lens train data/bench/pilot/bench.jsonl --out models/lens --gnn
+scholarlens lens train data/bench/pilot/bench.jsonl --exclude ai+llm_paraphrase   # unseen-attack test
+scholarlens detect paper.tex --model models/lens       # per-segment calibrated P(AI)
+```
+
+`lens train` writes `report.md`, which has two tables:
+1. AUROC and TPR at 1% FPR for each detector against each attack family.
+2. False-positive rate on each human family: clean, Quill-edited and grammar-checked text, broken down by domain.
+
+The second table is the fairness result: it shows whether honest authors who edit their writing get flagged.
+
+Builds are resumable and every step is cached. `configs/bench.pilot-cpu.toml` runs fully offline with small local models (an easy pilot); the real study should use several strong generators (see `configs/bench.example.toml`). DIPPER attacks need a GPU.
+
 ## Python
 
 ```python
