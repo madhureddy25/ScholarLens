@@ -96,6 +96,7 @@ class EditSession:
     similarity_model: str | None
     started_at: str
     finished_at: str
+    glossary: tuple[str, ...] = ()
 
     def replacements(self) -> dict[str, str]:
         return {e.node_id: e.edited for e in self.edits if e.status == Status.ACCEPTED and e.edited is not None}
@@ -223,4 +224,4 @@ class Quill:
                 on_progress(k, len(targets), e)
         sim_name = getattr(self.similarity, "name", None) if self.similarity else None
         return EditSession(doc, edits, self.model.describe(), cfg, sim_name, started,
-                           datetime.now(UTC).isoformat(timespec="seconds"))
+                           datetime.now(UTC).isoformat(timespec="seconds"), tuple(self.masker.config.glossary))

@@ -109,6 +109,10 @@ def write_outputs(session: EditSession, out_dir: str | Path, *, input_path: str 
     manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
     files["disclosure"] = manifest_path
 
+    from scholarlens.edit.session_io import save_session
+
+    files["session"] = save_session(session, out / f"{stem}.session.json", input_path=input_path)
+
     review_path = out / f"{stem}.review.html"
     review_path.write_text(render_review_html(session, manifest), encoding="utf-8")
     files["review"] = review_path

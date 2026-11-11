@@ -306,5 +306,94 @@ def serve(host: str = "127.0.0.1", port: int = 8000) -> None:
     uvicorn.run("scholarlens.api.app:app", host=host, port=port)
 
 
+@app.command()
+def review(
+    session_file: Path,
+    accept_all: bool = typer.Option(False, help="Accept every edit without prompting."),
+    reject_all: bool = typer.Option(False, help="Reject every edit without prompting."),
+    decisions: Path = typer.Option(None, help='JSON file {"n0005": "accept", "n0006": "reject"}.'),
+    out: Path = typer.Option(None, help="Output directory (default: next to the session file)."),
+    no_feedback: bool = typer.Option(False, "--no-feedback", help="Do not record decisions locally."),
+) -> None:
+    """Accept or reject each Quill edit; writes the final document with only accepted edits."""
+    import json as _json
+
+    from rich.text import Text
+
+    from scholarlens.edit.diff import diff
+    from scholarlens.learn.review import review_session
+
+    fixed = _json.loads(decisions.read_text()) if decisions else {}
+
+    def show(e) -> None:
+        t = Text()
+        for o in diff(e.mask.masked, e.edited_masked):
+            old, new = e.mask._substitute("".join(o.old)), e.mask._substitute("".join(o.new))
+            if o.tag == "equal":
+                t.append(old)
+                continue
+            if old.strip():
+                t.append(old, style="red strike")
+            if new.strip():
+                t.append(new, style="green")
+        console.rule(f"{e.node_id} · {e.section or ''} · similarity {e.similarity}")
+        console.print(t)
+
+    def decide(e) -> str:
+        if e.node_id in fixed:
+            return fixed[e.node_id]
+        if accept_all or reject_all:
+            return "accept" if accept_all else "reject"
+        show(e)
+        answer = typer.prompt("[a]ccept / [r]eject / [s]kip", default="a").strip().lower()[:1]
+        return {"a": "accept", "r": "reject", "s": "skip"}.get(answer, "skip")
+
+    res = review_session(session_file, decide, out_dir=out, record_feedback=not no_feedback)
+    console.print(f"accepted {len(res.accepted)} · rejected {len(res.rejected)} · skipped {len(res.skipped)}")
+    for k, f in res.files.items():
+        console.print(f"  {k:10} {f}")
+    if res.feedback_entries and not no_feedback:
+        console.print(f"[dim]{len(res.feedback_entries)} decisions saved locally (masked text only). "
+                      "Run `scholarlens contribute` to share them and help improve Quill.[/]")
+
+
+@app.command()
+def contribute(
+    repo_dir: Path = typer.Option(Path("."), help="Your local clone of the ScholarLens repository."),
+    yes: bool = typer.Option(False, "--yes", help="Confirm without prompting."),
+) -> None:
+    """Share your review decisions (masked text only) as a public contribution file for a pull request."""
+    from scholarlens.learn import feedback
+    from scholarlens.learn.contribute import prepare, write_contribution
+
+    pending = [e for e in feedback.load_all() if not e.get("contributed")]
+    ok, bad = prepare(pending)
+    console.print(f"{len(pending)} unshared decisions · {len(ok)} shareable · {len(bad)} held back")
+    for rid, why in bad[:10]:
+        console.print(f"  [yellow]held back[/] {rid[:8]}: {', '.join(why)}")
+    if not ok:
+        return
+    console.rule("example of what will be shared")
+    console.print(_json_preview(ok[0]), markup=False, highlight=False)
+    console.print("[bold]Contributions are public[/] and become part of the repository history. Only masked text is "
+                  "included, but share only text you have the right to share.")
+    if not yes and not typer.confirm(f"Write {len(ok)} entries to {repo_dir / 'contributions'}?"):
+        raise typer.Exit(1)
+    path = write_contribution(ok, repo_dir)
+    feedback.mark_contributed({e["id"] for e in pending} - {rid for rid, _ in bad})
+    console.print(f"[green]wrote[/] {path}")
+    console.print("Open a pull request with it:\n"
+                  f"  git checkout -b contrib-{path.stem}\n  git add {path.relative_to(repo_dir)}\n"
+                  f'  git commit -m "Feedback contribution {path.stem}"\n  git push -u origin contrib-{path.stem}\n'
+                  "  gh pr create --fill")
+
+
+def _json_preview(entry: dict) -> str:
+    import json as _json
+
+    return _json.dumps({k: entry[k] for k in ("mode", "decision", "masked_input", "masked_output")}, indent=2,
+                       ensure_ascii=False)
+
+
 if __name__ == "__main__":
     app()
