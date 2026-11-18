@@ -45,4 +45,4 @@ Before every push, run the **full** fast suite (not just the files you touched),
 
 ## Where things stand (Nov 2026)
 
-All milestones are implemented and tested (see PROJECT_LOG §2). Next: run the laptop study (`LAPTOP_COMMANDS.ps1`, details in `docs/WINDOWS.md`), publish `bench-v1`/`lens-v1`/`quill-v1`, then write the paper (`docs/PAPER_PLAN.md`).
+All milestones are implemented and tested (see PROJECT_LOG §2). The laptop study is done: `bench-v1` and `lens-v1` are published and results are in `reports/` (PROJECT_LOG §5b). Next: `lens rescore` the three laptop Lens models (finding 15), then write the paper (`docs/PAPER_PLAN.md`).

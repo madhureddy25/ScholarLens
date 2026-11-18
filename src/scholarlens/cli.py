@@ -269,6 +269,29 @@ def lens_train(
     console.print(f"[green]saved[/] {out}/fusion, {out}/report.json, {out}/report.md")
 
 
+@lens_app.command("rescore")
+def lens_rescore(
+    bench: Path,
+    models: list[Path] = typer.Argument(..., help="One or more `lens train` output directories."),
+    binoculars: bool = typer.Option(False, help="Also score the Binoculars baseline."),
+) -> None:
+    """Re-evaluate saved Lens models on the test split with the current metrics (no retraining).
+
+    Uses the saved models and cached features, so it takes minutes. Rewrites report.json and report.md."""
+    from scholarlens.detect.runner import rescore
+
+    bino = None
+    if binoculars:
+        from scholarlens.detect.zero_shot import Binoculars
+
+        bino = Binoculars()
+    for out in models:
+        console.print(f"[bold]rescoring[/] {out}")
+        rescore(bench, out, binoculars=bino, log=lambda m: console.print(m, highlight=False))
+        console.print((out / "report.md").read_text(encoding="utf-8"), markup=False, highlight=False)
+        console.print(f"[green]updated[/] {out}/report.json, {out}/report.md")
+
+
 @app.command()
 def detect(path: Path, model: Path = typer.Option(None, help="Directory from `lens train` (default: installed release)."),
            segment_size: int = 250) -> None:
@@ -435,6 +458,14 @@ def learn_quill(
     if not grammar_url and not judge:
         console.print("[yellow]No --grammar-url or --judge: the quality reward is off, so training mainly teaches "
                       "integrity, fidelity and restraint.[/]")
+    if not cpu:
+        import torch
+
+        mps = getattr(torch.backends, "mps", None)
+        if not torch.cuda.is_available() and not (mps and mps.is_available()):
+            console.print(f"[yellow]No GPU visible to torch {torch.__version__}: training will run on the CPU and "
+                          "take many hours. If this machine has an NVIDIA GPU, torch is probably the CPU build; "
+                          "reinstall it from https://download.pytorch.org/whl/cu126 (docs/WINDOWS.md).[/]")
     cfg = RLConfig(base_model=base, out_dir=str(out), max_steps=steps, num_generations=group,
                    per_device_train_batch_size=group, load_in_4bit=load_in_4bit, use_cpu=cpu)
     rep = improve_quill(bench=bench, repo_dir=repo_dir, cfg=cfg, reward=reward, mode=mode, current_adapter=current,
