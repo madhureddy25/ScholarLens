@@ -74,6 +74,13 @@ The full table of changes from the blueprint is in `ARCHITECTURE.md`. In short:
 | 9 | **Hugging Face downloads behind a proxy:** the Xet protocol and CDN redirects failed. | `HF_HUB_DISABLE_XET=1`, set at package import. Hosts needed: huggingface.co, us.aws.cdn.hf.co, eu.aws.cdn.hf.co, cdn-lfs*.hf.co, download.pytorch.org. |
 
 | 10 | **The disclosure statement omitted the Quill-RL adapter**, so it would name only the base model. Found in the end-to-end check. | The statement and model name now include the adapter, e.g. "…with the fine-tuned adapter 'quill-rl-v1'". |
+| 11 | **Kaggle rejected the benchmark zip** ("forbidden character in name ('\\')"): `Compress-Archive` in Windows PowerShell 5.1 writes backslash paths. | Runbooks zip with `C:\Windows\System32\tar.exe -a -c -f`. |
+| 12 | **Kaggle moved dataset mounts** to `/kaggle/input/datasets/<user>/<slug>/`, so `cp -r /kaggle/input/*/laptop-v1` found nothing. | The notebook cell locates `laptop-v1` with `find`. |
+| 13 | **Kaggle notebook usability:** bitsandbytes prints `MatMul8bitLt: inputs will be cast…` on every forward pass, burying progress; the circular-arrow toolbar button is a *factory reset* that deleted a running session's files. | Output piped through `grep -v MatMul8bitLt`; runbooks warn about the button. DIPPER took about 9.5 h for 1,000 texts on a T4 x2 (12 h limit), not 3–4 h. |
+| 14 | **Windows torch silently became the CPU build** (`2.15.0+cpu`): `pip install -e ".[all,dev]"` after the `cu126` install replaced it. Quill-RL ran at about 500 s/step on the CPU (about 30 s on the GPU). | Runbooks reinstall the `cu126` build *after* the package and check `torch.__version__`; `learn quill` now warns when torch sees no GPU. |
+| 15 | **Isotonic ties understated Lens-fusion's TPR@1% FPR.** Calibrated scores are a step function; when the threshold lands on a plateau, every AI text on it counts as missed (`lens-no-edits` showed clean-human FPR 0.000 instead of 0.007). | Test-split metrics and permutation importance use `FusionDetector.rank_scores` (uncalibrated, same order, no ties); `predict_proba` stays calibrated for users. `scholarlens lens rescore` rewrites old reports from cached features. |
+| 16 | **DIPPER artifacts:** the T5 vocabulary drops Greek letters and some symbols (`ΛCDM`→`CDM`, `θ-(ET)2X`→`-(ET)2X`); a few outputs repeat a sentence; 1 of 500 L60_O60 outputs is junk ("Cf. (a) and (b) of the preceding note.", train split). | Kept: these are properties of the attack as published. Worth one sentence in the paper. |
+| 17 | **Quill-RL without a quality reward converges to restraint:** v1 changed 0.5% of text; on the sample paper 5 paragraphs were unchanged, 1 barely changed, and 1 dropped `⟦CITE_1⟧` and was rejected by the integrity gate. | Expected from the reward design. With an LLM judge (v2), quality rose but integrity fell and the gate rejected it (§5b). |
 
 ## 4b. End-to-end verification (CPU, real models, nothing published)
 
@@ -99,6 +106,40 @@ Every user-facing path was run for real on the pilot data, in addition to the 19
 - **Fast-DetectGPT, perplexity, the GCN and fusion** all ran.
 - **The top fusion features** are now style signals (Fast-DetectGPT, MATTR, top-10 rank fraction, function-word ratio), not length proxies.
 
+## 5b. Laptop study (Nov 2026)
+
+Reports are in `reports/` (`lens-v1.md`, `lens-unseen-dipper.md`, `lens-no-edits.md`, `quill-rl-v1.json`, `quill-rl-v2.json`, `bench-manifest.json`). Published: `bench-v1`, `lens-v1`.
+
+**Bench `laptop-v1`:** 1,500 pre-2022 arXiv abstracts, 1,500 matched AI abstracts (Qwen2.5-7B, Phi-3.5, Llama-3.2-3B; 500 each), and 500 each of `llm_paraphrase`, `dipper_L20_O0`, `dipper_L60_O60`, `quill_proofread` and `quill_clarity`: 5,500 records, no leakage. Test split: 145 human, 145 AI, 44 per attack, 46 per edit family.
+
+**Lens (test split, AUROC / TPR@1% FPR).** These TPRs were computed before finding 15 and are conservative for lens-fusion; rerun `lens rescore` before quoting them. AUROC is essentially unaffected.
+
+| detector | ai | dipper_L20_O0 | dipper_L60_O60 | llm_paraphrase |
+|---|---|---|---|---|
+| lens-fusion | 0.990 / 0.88 | 0.964 / 0.82 | 0.959 / 0.48 | 0.968 / 0.70 |
+| lens-gnn | 0.965 / 0.50 | 0.962 / 0.43 | 0.916 / 0.14 | 0.953 / 0.39 |
+| fast_detectgpt | 0.891 / 0.36 | 0.910 / 0.27 | 0.918 / 0.27 | 0.686 / 0.05 |
+| retrieval (oracle: index holds the test sources) | 1.000 / 1.00 | 0.999 / 0.95 | 0.891 / 0.61 | 1.000 / 1.00 |
+
+- **Fairness:** at the clean-human operating point (1/145 flagged by construction), Quill-edited human text was flagged 1/46 by lens-fusion, the same as fast_detectgpt; 0/46 by lens-gnn; up to 3/46 by neg_log_rank.
+- **Unseen attack** (`lens-unseen-dipper`, L60_O60 held out of training): L60_O60 AUROC 0.959 → 0.893 (below fast_detectgpt's 0.918), TPR 0.48 → 0.39 (still above fast_detectgpt's 0.27). Adversarial training helps, but seeing the attack matters. The other columns rose (clean 0.88 → 0.95, llm_paraphrase 0.70 → 0.84); recheck after rescoring before reading this as a trade-off.
+- **No edits in training** (`lens-no-edits`): AUROC unchanged (within 0.006) and edited-human FPR 0/46 either way. At this sample size there is no evidence that training on Quill edits lowers false positives; Lens did not flag these edits even without them. Its lower TPRs coincide with the tie problem (clean-human FPR 0.000), so they are not interpretable until rescored.
+- **Top fusion features:** `llm_marker_per_1k`, `lm_fast_detectgpt`, `avg_word_len`. The marker-word feature may not transfer to other generators; a leave-one-generator-out run is future work.
+- **Sample sizes are small** (44 per attack: a TPR of 0.48 has a margin of about ±0.15). Use the bootstrap `auroc_ci95` in `report.json`.
+
+**Quill-RL** (Qwen2.5-0.5B-Instruct, GRPO, 200 steps, frozen eval set of 60 paragraphs):
+
+| metric | base | v1 (no quality reward) | v2 (`--judge ollama:qwen2.5:3b`) |
+|---|---|---|---|
+| integrity_rate | 0.633 | **0.717** | 0.667 |
+| format_rate | 0.983 | 1.000 | 1.000 |
+| mean_similarity | 0.988 | 0.995 | 0.991 |
+| mean_quality (judge) | – | 0.233 | **0.550** |
+| mean_change | 0.037 | 0.005 | 0.023 |
+| gate | – | accepted vs base | **rejected** vs v1 (integrity and reward lower) |
+
+v1: 1.8 h on the RTX 3050. v2: 5.9 h (the judge scores every candidate). The story: integrity-only RL learns restraint; adding a quality judge produces real edits at a small integrity cost, and the gate refuses the regression. `quill-v1` was not published, because it barely edits.
+
 ## 6. Hardware notes
 
 - **Development container:** 4 CPUs, no GPU.
@@ -110,10 +151,10 @@ Every user-facing path was run for real on the pilot data, in addition to the 19
 
 ## 7. Next steps
 
-1. Build the laptop benchmark, run DIPPER on Kaggle, merge (`docs/WINDOWS.md` steps 1–2).
-2. Train Lens: the main run plus held-out-attack and no-edit-training ablations. Train Quill-RL (step 3).
-3. Publish `bench-v1`, `lens-v1`, `quill-v1`, then trigger `learn.yml` (step 4).
-4. Commit the reports to `reports/` and write the paper (`docs/PAPER_PLAN.md`).
+1. ~~Build the laptop benchmark, run DIPPER, train Lens and Quill-RL, publish `bench-v1`/`lens-v1`, commit `reports/`.~~ Done (§5b). `learn.yml` was triggered once and now runs weekly.
+2. On the laptop: `scholarlens lens rescore data/bench/laptop-v1/bench.jsonl models/lens-v1 models/lens-unseen-dipper models/lens-no-edits`, then copy the three `report.md` files into `reports/` again (finding 15).
+3. Write the paper (`docs/PAPER_PLAN.md`) from `reports/`.
+4. Quill: a stronger integrity penalty, or LanguageTool as the quality reward, to get edits without the integrity loss seen in v2.
 5. Later work:
    - **Web UI** for review.
    - **PubMed Central / S2ORC sources,** for domains beyond arXiv.

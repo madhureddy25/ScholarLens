@@ -49,18 +49,17 @@ scholarlens lens train data/bench/laptop-v1/bench.jsonl --out models/lens-v1 --g
 
 ## 5. DIPPER on Kaggle (free GPU)
 
-1. Zip `data/bench/laptop-v1` and upload it as a private Kaggle dataset.
-2. Create a new notebook. In Settings, set Accelerator to **GPU T4** and turn **Internet on**. Add your dataset, then run these cells. Each `!` line runs in its own shell, so `%cd` is used to change directory:
+1. Zip `data/bench/laptop-v1` and upload it as a private Kaggle dataset. On Windows, zip with `tar.exe` (see `docs/WINDOWS.md`): `Compress-Archive` writes backslash paths that Kaggle rejects.
+2. From the dataset page, create a new notebook. In Settings, set Accelerator to **GPU T4 x2** and turn **Internet on**. Then run these cells. Each `!` line runs in its own shell, so `%cd` is used to change directory:
    ```
-   !git clone https://github.com/madhureddy25/ScholarLens.git
+   !git clone -q https://github.com/madhureddy25/ScholarLens.git /kaggle/working/ScholarLens
    %cd /kaggle/working/ScholarLens
    !pip install -q -e ".[ml]" bitsandbytes sentencepiece datasets
-   !ls /kaggle/input/*/
-   !mkdir -p data/bench && cp -r /kaggle/input/*/laptop-v1 data/bench/
-   !scholarlens bench build configs/bench.kaggle-dipper.toml
-   !mkdir -p /kaggle/working/dipper && cp data/bench/laptop-v1/transforms/dipper_*.jsonl /kaggle/working/dipper/
+   !SRC=$(find /kaggle/input -maxdepth 5 -type d -name laptop-v1 | head -n 1); echo "found: $SRC"; mkdir -p data/bench && cp -r "$SRC" data/bench/ && ls data/bench/laptop-v1/transforms
+   !PYTHONUNBUFFERED=1 scholarlens bench build configs/bench.kaggle-dipper.toml 2>&1 | grep --line-buffered -v MatMul8bitLt
    ```
-3. From the notebook's Output panel, download `dipper/dipper_L20_O0.jsonl` and `dipper/dipper_L60_O60.jsonl` into `data/bench/laptop-v1/transforms/` on your laptop.
+   Expect about 9.5 hours for both settings (500 texts each) on a T4 x2; Kaggle's limit is 12 hours.
+3. From the notebook's Output panel (`/kaggle/working/ScholarLens/data/bench/laptop-v1/transforms`), download `dipper_L20_O0.jsonl` and `dipper_L60_O60.jsonl` into `data/bench/laptop-v1/transforms/` on your laptop, under exactly those names.
 4. Rerun `scholarlens bench build configs/bench.laptop.toml` to merge everything.
 
 ## 6. Train Quill-RL
@@ -72,7 +71,7 @@ scholarlens learn quill --bench data/bench/laptop-v1/bench.jsonl --base Qwen/Qwe
 # clarity mode with a judge:  --mode clarity --judge ollama:qwen2.5:7b
 ```
 
-On an RTX 3050, expect about 1–3 hours for 200 steps. The command compares the new adapter with the current one on the frozen test set and tells you whether it was accepted. Then try it:
+On an RTX 3050, expect about 2 hours for 200 steps (about 6 with `--judge`). Check first that `torch.cuda.is_available()` is True: on the CPU it takes about a day. The command compares the new adapter with the current one on the frozen test set and tells you whether it was accepted. Then try it:
 
 ```bash
 scholarlens edit paper.tex -m quill:models/quill-rl --mode proofread
