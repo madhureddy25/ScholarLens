@@ -118,3 +118,43 @@ def test_runner_writes_report(tmp_path):
     assert {"ai", "ai+llm_paraphrase"} <= set(fusion["attacks"]) and "human" in fusion["human_fpr"]
     assert (tmp_path / "out" / "report.md").read_text().startswith("# Lens evaluation")
     json.loads((tmp_path / "out" / "report.json").read_text())
+
+
+def test_rank_scores_same_order_without_isotonic_ties(tmp_path):
+    recs = synthetic_bench()
+    tr = [r for r in recs if r.split == "train"]
+    va = [r for r in recs if r.split == "val"]
+    te = [r for r in recs if r.split in ("test", "val")]
+    det = FusionDetector(Featurizer(cache=tmp_path / "f.jsonl")).fit(tr, va)
+    p, s = det.predict_proba(te), det.rank_scores(te)
+    assert len(np.unique(s)) >= len(np.unique(p))  # isotonic steps create ties; the raw score does not
+    # calibration is monotone: whenever the raw score orders two texts strictly, P(AI) never reverses them
+    order = np.argsort(s, kind="stable")
+    assert (np.diff(p[order]) >= -1e-12).all()
+    y = np.array([r.label == "ai" for r in te], dtype=int)
+    assert auroc(y, s) >= auroc(y, p) - 1e-9
+
+
+def test_rescore_reproduces_report_without_retraining(tmp_path):
+    from scholarlens.detect.runner import rescore, train_and_evaluate
+
+    write_jsonl(synthetic_bench(), tmp_path / "bench.jsonl")
+    out = tmp_path / "out"
+    first = train_and_evaluate(tmp_path / "bench.jsonl", out, embedder=HashingEmbedder(), log=lambda *_: None)
+    assert first["fusion_scores"] == "uncalibrated"
+    (out / "report.md").write_text("stale", encoding="utf-8")
+    again = rescore(tmp_path / "bench.jsonl", out, log=lambda *_: None)
+    assert set(again["detectors"]) == set(first["detectors"])
+    for name, rep in first["detectors"].items():
+        for fam, row in rep["attacks"].items():
+            assert again["detectors"][name]["attacks"][fam]["auroc"] == pytest.approx(row["auroc"])
+            assert again["detectors"][name]["attacks"][fam]["tpr@0.01fpr"] == pytest.approx(row["tpr@0.01fpr"])
+    assert (out / "report.md").read_text(encoding="utf-8").startswith("# Lens evaluation")
+
+
+def test_rescore_needs_a_trained_directory(tmp_path):
+    from scholarlens.detect.runner import rescore
+
+    write_jsonl(synthetic_bench(30), tmp_path / "bench.jsonl")
+    with pytest.raises(FileNotFoundError):
+        rescore(tmp_path / "bench.jsonl", tmp_path / "nothing", log=lambda *_: None)

@@ -82,8 +82,25 @@ class FusionDetector:
         return out
 
     def predict_proba(self, records: list[Record]) -> np.ndarray:
+        """Calibrated P(AI), for users. Isotonic calibration is a step function, so many texts share a value."""
         X, _ = self._matrix(records)
         return self.model.predict_proba(X)[:, 1]
+
+    def _uncalibrated(self):
+        m = self.model
+        if hasattr(m, "calibrated_classifiers_"):  # CalibratedClassifierCV(FrozenEstimator(base))
+            m = m.estimator
+            m = getattr(m, "estimator", m)
+        return m
+
+    def rank_scores(self, records: list[Record]) -> np.ndarray:
+        """Uncalibrated score for ranking metrics (AUROC, TPR at a fixed FPR).
+
+        Calibration is monotone, so the ordering is the same as ``predict_proba``, but without the ties that
+        isotonic steps create. With ties, a threshold set at 1% FPR can land on a plateau and count every AI
+        text on it as missed, which understates TPR."""
+        X, _ = self._matrix(records)
+        return self._uncalibrated().predict_proba(X)[:, 1]
 
     def score_texts(self, texts: list[str], ids: list[str] | None = None) -> np.ndarray:
         ids = ids or [f"adhoc:{hash(t)}" for t in texts]
@@ -94,7 +111,8 @@ class FusionDetector:
         from sklearn.inspection import permutation_importance
 
         X, y = self._matrix(records)
-        r = permutation_importance(self.model, X, y, scoring="roc_auc", n_repeats=n_repeats, random_state=self.seed)
+        r = permutation_importance(self._uncalibrated(), X, y, scoring="roc_auc", n_repeats=n_repeats,
+                                   random_state=self.seed)
         return dict(sorted(zip(self.feature_names, r.importances_mean.round(4).tolist(), strict=True),
                            key=lambda kv: -kv[1]))
 
