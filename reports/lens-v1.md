@@ -1,12 +1,12 @@
 # Lens evaluation — data\bench\laptop-v1\bench.jsonl
 
-Test split. Threshold per detector set so clean human text has FPR ≤ 1%.
+Test split. Threshold per detector set so clean human text has FPR ≤ 1%. lens-fusion is ranked by its uncalibrated score (same order as P(AI), without isotonic ties).
 
 ## AI detection under attack (AUROC / TPR@1% FPR)
 
 | detector | ai | ai+dipper_L20_O0 | ai+dipper_L60_O60 | ai+llm_paraphrase |
 |---|---|---|---|---|
-| lens-fusion | 0.990 / 0.88 | 0.964 / 0.82 | 0.959 / 0.48 | 0.968 / 0.70 |
+| lens-fusion | 0.990 / 0.88 | 0.958 / 0.82 | 0.959 / 0.50 | 0.967 / 0.75 |
 | fast_detectgpt | 0.891 / 0.36 | 0.910 / 0.27 | 0.918 / 0.27 | 0.686 / 0.05 |
 | neg_log_ppl | 0.920 / 0.13 | 0.868 / 0.11 | 0.822 / 0.05 | 0.799 / 0.00 |
 | neg_log_rank | 0.916 / 0.24 | 0.860 / 0.25 | 0.818 / 0.14 | 0.766 / 0.02 |
@@ -28,17 +28,17 @@ Test split. Threshold per detector set so clean human text has FPR ≤ 1%.
 
 ## Top fusion features (permutation importance, ΔAUROC)
 
-- `llm_marker_per_1k`: +0.0448
-- `lm_fast_detectgpt`: +0.0388
-- `avg_word_len`: +0.0264
-- `lm_logprob_std`: +0.0060
-- `function_word_ratio`: +0.0051
-- `sent_len_min`: +0.0048
-- `tr_adj_sim_max`: +0.0045
-- `lm_top1_frac`: +0.0044
-- `tr_delta_adj_mean`: +0.0043
-- `lm_entropy_mean`: +0.0039
-- `lm_log_ppl`: +0.0038
-- `sent_len_mean`: +0.0038
+- `llm_marker_per_1k`: +0.0407
+- `lm_fast_detectgpt`: +0.0342
+- `avg_word_len`: +0.0231
+- `lm_logprob_std`: +0.0033
+- `sent_len_min`: +0.0021
+- `tr_adj_sim_max`: +0.0020
+- `function_word_ratio`: +0.0019
+- `tr_delta_adj_mean`: +0.0017
+- `sent_len_std`: +0.0015
+- `tr_offdiag_sim_mean`: +0.0011
+- `lm_top1_frac`: +0.0010
+- `burstiness`: +0.0009
 
-Training: {"n_train": 4311, "n_val": 675, "excluded_families": [], "families": ["ai", "ai+dipper_L20_O0", "ai+dipper_L60_O60", "ai+llm_paraphrase", "human", "human+quill_clarity", "human+quill_proofread"], "featurizer": "lm=gpt2|emb=sentence-transformers/all-MiniLM-L6-v2", "estimator": "hgb", "calibration": "isotonic"}
+Training: {"feature_names": ["avg_word_len", "burstiness", "colon_per_1k", "comma_per_sentence", "connective_start_rate", "dash_per_1k", "function_word_ratio", "llm_marker_per_1k", "lm_entropy_mean", "lm_entropy_std", "lm_entropy_window_var", "lm_fast_detectgpt", "lm_log_ppl", "lm_log_rank_mean", "lm_logprob_mean", "lm_logprob_std", "lm_ppl", "lm_top10_frac", "lm_top1_frac", "mattr", "paren_per_1k", "semicolon_per_1k", "sent_len_cv", "sent_len_max", "sent_len_mean", "sent_len_min", "sent_len_std", "tr_adj_sim_max", "tr_adj_sim_mean", "tr_adj_sim_min", "tr_adj_sim_std", "tr_adj_spike_rate", "tr_delta_abs_mean", "tr_delta_adj_mean", "tr_delta_adj_std", "tr_local_global_ratio", "tr_offdiag_sim_mean", "tr_offdiag_sim_var"], "n_train": 4311, "n_val": 675, "excluded_families": [], "families": ["ai", "ai+dipper_L20_O0", "ai+dipper_L60_O60", "ai+llm_paraphrase", "human", "human+quill_clarity", "human+quill_proofread"], "featurizer": "lm=gpt2|emb=sentence-transformers/all-MiniLM-L6-v2", "estimator": "hgb", "calibration": "isotonic"}
