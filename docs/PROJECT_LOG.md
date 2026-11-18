@@ -112,20 +112,23 @@ Reports are in `reports/` (`lens-v1.md`, `lens-unseen-dipper.md`, `lens-no-edits
 
 **Bench `laptop-v1`:** 1,500 pre-2022 arXiv abstracts, 1,500 matched AI abstracts (Qwen2.5-7B, Phi-3.5, Llama-3.2-3B; 500 each), and 500 each of `llm_paraphrase`, `dipper_L20_O0`, `dipper_L60_O60`, `quill_proofread` and `quill_clarity`: 5,500 records, no leakage. Test split: 145 human, 145 AI, 44 per attack, 46 per edit family.
 
-**Lens (test split, AUROC / TPR@1% FPR).** These TPRs were computed before finding 15 and are conservative for lens-fusion; rerun `lens rescore` before quoting them. AUROC is essentially unaffected.
+**Lens (test split, AUROC / TPR@1% FPR),** rescored with uncalibrated ranking (finding 15):
 
 | detector | ai | dipper_L20_O0 | dipper_L60_O60 | llm_paraphrase |
 |---|---|---|---|---|
-| lens-fusion | 0.990 / 0.88 | 0.964 / 0.82 | 0.959 / 0.48 | 0.968 / 0.70 |
+| lens-fusion | 0.990 / 0.88 | 0.958 / 0.82 | 0.959 / 0.50 | 0.967 / 0.75 |
 | lens-gnn | 0.965 / 0.50 | 0.962 / 0.43 | 0.916 / 0.14 | 0.953 / 0.39 |
 | fast_detectgpt | 0.891 / 0.36 | 0.910 / 0.27 | 0.918 / 0.27 | 0.686 / 0.05 |
 | retrieval (oracle: index holds the test sources) | 1.000 / 1.00 | 0.999 / 0.95 | 0.891 / 0.61 | 1.000 / 1.00 |
 
+Rescoring changed only lens-fusion's TPRs (L60_O60 0.48 → 0.50, llm_paraphrase 0.70 → 0.75 in this run; AUROC within 0.006). It mattered most for `lens-no-edits`, whose TPRs had been depressed by ties (below).
+
 - **Fairness:** at the clean-human operating point (1/145 flagged by construction), Quill-edited human text was flagged 1/46 by lens-fusion, the same as fast_detectgpt; 0/46 by lens-gnn; up to 3/46 by neg_log_rank.
-- **Unseen attack** (`lens-unseen-dipper`, L60_O60 held out of training): L60_O60 AUROC 0.959 → 0.893 (below fast_detectgpt's 0.918), TPR 0.48 → 0.39 (still above fast_detectgpt's 0.27). Adversarial training helps, but seeing the attack matters. The other columns rose (clean 0.88 → 0.95, llm_paraphrase 0.70 → 0.84); recheck after rescoring before reading this as a trade-off.
-- **No edits in training** (`lens-no-edits`): AUROC unchanged (within 0.006) and edited-human FPR 0/46 either way. At this sample size there is no evidence that training on Quill edits lowers false positives; Lens did not flag these edits even without them. Its lower TPRs coincide with the tie problem (clean-human FPR 0.000), so they are not interpretable until rescored.
+- **Unseen attack** (`lens-unseen-dipper`, L60_O60 held out of training): L60_O60 AUROC 0.959 → 0.898 (below fast_detectgpt's 0.918), TPR 0.50 → 0.39 (still above fast_detectgpt's 0.27). Adversarial training helps, but seeing the attack matters.
+- **No edits in training** (`lens-no-edits`): before rescoring this looked like a large TPR loss (0.32 on L60_O60); that was entirely the tie artifact. Rescored, it matches or exceeds the main run (ai 0.92, L20 0.82, L60 0.57, llm_paraphrase 0.82; AUROC within 0.007) with the same edited-human FPR (1/46). **In this study, training on Quill-edited human text gave no measurable fairness or accuracy benefit;** Lens did not flag light edits even without them.
+- **Possible trade-off:** both ablations (fewer hard families in training) have higher TPR on the families they keep (e.g. llm_paraphrase 0.84 and 0.82 vs 0.75). With 44 texts per family these gaps are 3–4 texts, within noise; a multi-seed or larger-test run is needed before claiming it.
 - **Top fusion features:** `llm_marker_per_1k`, `lm_fast_detectgpt`, `avg_word_len`. The marker-word feature may not transfer to other generators; a leave-one-generator-out run is future work.
-- **Sample sizes are small** (44 per attack: a TPR of 0.48 has a margin of about ±0.15). Use the bootstrap `auroc_ci95` in `report.json`.
+- **Sample sizes are small** (44 per attack: a TPR of 0.50 has a margin of about ±0.15). Use the bootstrap `auroc_ci95` in `report.json`.
 
 **Quill-RL** (Qwen2.5-0.5B-Instruct, GRPO, 200 steps, frozen eval set of 60 paragraphs):
 
@@ -152,7 +155,7 @@ v1: 1.8 h on the RTX 3050. v2: 5.9 h (the judge scores every candidate). The sto
 ## 7. Next steps
 
 1. ~~Build the laptop benchmark, run DIPPER, train Lens and Quill-RL, publish `bench-v1`/`lens-v1`, commit `reports/`.~~ Done (§5b). `learn.yml` was triggered once and now runs weekly.
-2. On the laptop: `scholarlens lens rescore data/bench/laptop-v1/bench.jsonl models/lens-v1 models/lens-unseen-dipper models/lens-no-edits`, then copy the three `report.md` files into `reports/` again (finding 15).
+2. ~~Rescore the three laptop Lens models (finding 15).~~ Done; `reports/lens-*.md` are the rescored versions.
 3. Write the paper (`docs/PAPER_PLAN.md`) from `reports/`.
 4. Quill: a stronger integrity penalty, or LanguageTool as the quality reward, to get edits without the integrity loss seen in v2.
 5. Later work:
