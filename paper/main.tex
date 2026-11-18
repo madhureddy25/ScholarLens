@@ -1,0 +1,356 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+\usepackage{enumitem}
+\usepackage[skip=4pt,font=small]{caption}
+\setlist{nosep,leftmargin=*}
+
+\newcommand{\todo}[1]{\textcolor{red!70!black}{[TODO: #1]}}
+\newcommand{\fy}[1]{\texttt{#1}}
+
+\title{Fair and Robust Detection of Machine-Generated Scientific Prose:\\
+Paraphrase Attacks, Honest Editing, and an Integrity-Gated Editing Assistant}
+\author{Baki Madhu Reddy\\ \todo{affiliation} \\ \small Draft of \today}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Detectors of machine-generated text are increasingly used to judge scientific writing, yet they are known to fail under paraphrasing and to flag honest authors, particularly non-native English writers.
+We study both failure modes together on \emph{ScholarLens Bench}, a benchmark of 5{,}500 records built from 1{,}500 pre-2022 arXiv abstracts, matched abstracts from three open generators, three paraphrase attacks (an LLM paraphrase and DIPPER at two strengths), and two kinds of legitimate language editing of human text.
+\emph{Lens}, a calibrated gradient-boosting detector over stylometric, sentence-transition and language-model features, trained with attacked AI text and edited human text under their true labels, reaches AUROC $0.96$--$0.99$ on every family.
+At a 1\% false-positive rate on clean human text it detects $75\%$ of LLM-paraphrased abstracts, where Fast-DetectGPT detects $5\%$, and $50\%$ of the strongest DIPPER attack (Fast-DetectGPT: $27\%$), while flagging 1 of 46 lightly edited human abstracts, the same as the baselines.
+Holding the strongest attack out of training lowers its AUROC from $0.959$ to $0.898$; including edited human text in training produced no measurable benefit at our sample size.
+We also train \emph{Quill}, a citation-safe editor, with reinforcement learning on checkable, detector-free rewards and an acceptance gate.
+Integrity-only rewards raise placeholder integrity from $0.63$ to $0.72$ but teach the model to barely edit; adding an LLM judge triples judged quality but lowers integrity, and the gate rejects that model.
+We report two evaluation pitfalls that changed our conclusions: formatting and length shortcuts that leak labels, and score ties from isotonic calibration that understate true-positive rates.
+Everything runs on a 6\,GB laptop GPU plus a free Kaggle session; code, data and models are released.
+\end{abstract}
+
+\section{Introduction}
+
+AI-text detectors are now deployed by journals, universities and preprint servers.
+Two weaknesses make their use in scientific publishing risky.
+First, they are fragile: a paraphrase of machine-generated text often evades them \citep{krishna2023paraphrasing,sadasivan2023reliably}.
+Second, they are unfair: text by non-native English writers is flagged far more often than text by native writers \citep{liang2023biased}.
+The second problem interacts with a common, legitimate practice.
+Authors increasingly run their own drafts through grammar and clarity tools, and a detector that treats any polished text as machine-like penalises exactly the authors who most need such tools.
+
+Most evaluations study these problems separately.
+We build one benchmark and one pipeline that measure them together and that are cheap enough to rerun on commodity hardware:
+
+\begin{itemize}
+  \item \textbf{Bench} (\S\ref{sec:bench}): human arXiv abstracts from before 2022, matched machine abstracts, paraphrase attacks, and language-edited human text, split by paper with leakage checks.
+  \item \textbf{Lens} (\S\ref{sec:lens}): a fusion detector trained with attacked and edited text under their true labels, evaluated against zero-shot baselines and a retrieval oracle, with false-positive rates reported per human family.
+  \item \textbf{Quill} (\S\ref{sec:quill}): a citation-safe editor for an author's \emph{own} draft. Protected content is masked and verified, and a small model is trained with reinforcement learning on rewards that never involve a detector.
+  \item \textbf{Two evaluation pitfalls} (\S\ref{sec:pitfalls}) that changed our own conclusions during the study.
+\end{itemize}
+
+Our design rule throughout is that the editor is never optimised against a detector.
+The project began as a request for a detector-evasion ``humanizer''; that objective was declined, and the editor is rewarded only for keeping citations, numbers and meaning intact while making the changes the author asked for.
+
+\section{Related work}
+
+\paragraph{Zero-shot detection.}
+DetectGPT scores the curvature of a language model's log-probability around a text \citep{mitchell2023detectgpt}; Fast-DetectGPT replaces perturbation with an analytic sampling discrepancy and is two orders of magnitude faster \citep{bao2024fastdetectgpt}; Binoculars contrasts two related models \citep{hans2024binoculars}.
+These methods need no training data but depend on the scoring model and degrade under paraphrase.
+
+\paragraph{Paraphrase attacks and defences.}
+\citet{krishna2023paraphrasing} introduced DIPPER, an 11B paraphraser with controllable lexical and order diversity, showed that it evades several detectors, and proposed retrieval over a provider's generation log as a defence.
+\citet{sadasivan2023reliably} argue that recursive paraphrasing can defeat detection in general.
+
+\paragraph{Fairness.}
+\citet{liang2023biased} found that GPT detectors misclassify most TOEFL essays by non-native writers as machine-generated, and that simple vocabulary enrichment changes the verdict.
+We study the related question of whether \emph{legitimate editing} of human scientific text changes it.
+
+\paragraph{Reinforcement learning with checkable rewards.}
+Group Relative Policy Optimization (GRPO) \citep{shao2024deepseekmath} optimises a policy against rewards computed per group of samples, without a value model; Direct Preference Optimization (DPO) \citep{rafailov2023dpo} learns from preference pairs.
+We use GRPO with LoRA adapters \citep{hu2022lora} and rewards that a program can verify.
+
+\section{ScholarLens Bench}
+\label{sec:bench}
+
+\paragraph{Human text.}
+Abstracts come from a 2021 arXiv snapshot\footnote{Hugging Face dataset \texttt{gfissore/arxiv-abstracts-2021}; see also \citet{clement2019arxiv}.}, filtered to papers submitted before 2022 (year taken from the arXiv identifier) and to 100--300 words.
+We sample 1{,}500 abstracts.
+The domain mix follows arXiv and is dominated by physics (1{,}198), then mathematics (188), computer science (73), quantitative biology (30), quantitative finance (10) and statistics (1).
+
+\paragraph{Machine text.}
+Each human abstract gets one matched machine abstract with the same title, field and approximate length, from one of three open models served in 4-bit through Ollama: Qwen2.5-7B \citep{qwen2024qwen25}, Phi-3.5 \citep{abdin2024phi3} and Llama-3.2-3B \citep{dubey2024llama3}, 500 each, assigned round-robin.
+Two prompt styles are used: the title only, or the title plus the human abstract's first sentence, which the model continues.
+All generated text passes through a cleaning step that removes formatting artefacts (headers, wrapping quotes, ellipses) at generation and again at assembly (\S\ref{sec:pitfalls}).
+
+\paragraph{Attacks on machine text.}
+500 machine abstracts are paraphrased three ways: an LLM paraphrase (Qwen2.5-7B, meaning-preserving prompt), and DIPPER \citep{krishna2023paraphrasing} at lexical/order diversity 20/0 (light) and 60/60 (strong), run in 8-bit \citep{dettmers2022int8} on a free Kaggle T4.
+DIPPER rewrites three sentences at a time with the previous output as context.
+
+\paragraph{Legitimate edits of human text.}
+500 human abstracts are edited by Quill (\S\ref{sec:quill}) with Qwen2.5-7B in two modes: \fy{proofread} (grammar and spelling only) and \fy{clarity} (light rewording).
+Every edit passes Quill's integrity and similarity gates, so these are edits an honest author could plausibly accept.
+
+\paragraph{Splits and leakage.}
+Records are split 80/10/10 \emph{by paper}: every derivative of a human abstract (its machine counterpart, attacks and edits) shares its split.
+The builder checks that no paper appears in two splits.
+Table~\ref{tab:bench} gives the composition.
+
+\begin{table}[t]
+\centering
+\caption{ScholarLens Bench composition (\texttt{reports/bench-manifest.json}). 5{,}500 records from 1{,}500 papers; no cross-split leakage.}
+\label{tab:bench}
+\begin{tabular}{lrrrr}
+\toprule
+Family & Train & Val & Test & Total \\
+\midrule
+\fy{human} & 1{,}176 & 179 & 145 & 1{,}500 \\
+\fy{human+quill\_proofread} & 393 & 61 & 46 & 500 \\
+\fy{human+quill\_clarity} & 393 & 61 & 46 & 500 \\
+\fy{ai} & 1{,}176 & 179 & 145 & 1{,}500 \\
+\fy{ai+llm\_paraphrase} & 391 & 65 & 44 & 500 \\
+\fy{ai+dipper\_L20\_O0} & 391 & 65 & 44 & 500 \\
+\fy{ai+dipper\_L60\_O60} & 391 & 65 & 44 & 500 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Lens: a fusion detector}
+\label{sec:lens}
+
+\paragraph{Features.}
+Each text is described by 38 features in three groups.
+(i)~\emph{Stylometry}: sentence-length statistics and burstiness, moving-average type-token ratio (MATTR), function-word ratio, punctuation rates, connective-initial sentences, and the rate of words and phrases typical of LLM prose (e.g.\ \emph{delve}, \emph{pivotal}, \emph{shed light on}).
+(ii)~\emph{Sentence transitions}: statistics of the cosine-similarity matrix between sentence embeddings (all-MiniLM-L6-v2 \citep{reimers2019sbert,wang2020minilm}), including adjacent-sentence similarity, its spikes and variance, and the ratio of local to global similarity.
+(iii)~\emph{Language-model statistics} from GPT-2 \citep{radford2019gpt2}: log-perplexity, token log-rank, entropy and its dynamics, top-$k$ fractions, and the Fast-DetectGPT score \citep{bao2024fastdetectgpt}.
+Length-dependent features are deliberately excluded (\S\ref{sec:pitfalls}).
+
+\paragraph{Classifier.}
+A histogram gradient-boosting classifier is trained on the train split.
+Attacked machine text is labelled machine, and edited human text is labelled human, so the model is taught that paraphrasing does not make text human and editing does not make it machine.
+Probabilities are calibrated with isotonic regression \citep{zadrozny2002isotonic} on the validation split.
+We also train \emph{Lens-GNN}, a two-layer graph convolutional network \citep{kipf2017gcn} over a sentence graph (nodes: sentence embeddings with position and length; edges: adjacent sentences plus each sentence's three most similar sentences).
+
+\paragraph{Baselines.}
+Zero-shot scores from the same GPT-2: Fast-DetectGPT, negative log-perplexity, negative mean log-rank and negative entropy.
+We also report \emph{retrieval} \citep{krishna2023paraphrasing}: the maximum embedding similarity of a test text to an index of all clean machine abstracts.
+Because the index contains the sources of the test attacks, retrieval is an \emph{oracle} that assumes access to the generation log; it is not comparable to the blind detectors and is reported as an upper bound.
+Binoculars is implemented but was not run in this study.
+
+\paragraph{Protocol.}
+All metrics are on the frozen test split.
+For each detector we set the threshold so that at most 1\% of clean human test abstracts are flagged (here 1 of 145), and report the true-positive rate (TPR) on each machine family at that threshold, together with AUROC against clean human text.
+The false-positive rate (FPR) on each edited-human family is measured at the same threshold; it is the fairness result, whereas the clean-human FPR holds by construction.
+Lens-Fusion is ranked by its uncalibrated score, which has the same order as the calibrated probability but no ties (\S\ref{sec:pitfalls}).
+Test families are small (44--46 texts), so we give 95\% Clopper--Pearson intervals for the TPRs that matter most.
+
+\section{Quill: an integrity-gated editor}
+\label{sec:quill}
+
+\paragraph{Pipeline.}
+Quill edits only prose.
+Before a paragraph reaches a language model, citations, cross-references, mathematics, numbers, URLs, LaTeX commands and domain terms are replaced by sentinels such as \texttt{[[CITE\_1]]} (shown as double brackets here).
+An edit is accepted only if every sentinel returns exactly once, braces balance, and the semantic similarity to the original is at least $0.94$; otherwise Quill retries with specific feedback (up to three times) and finally keeps the original.
+Accepted edits are written as tracked changes, with an AI-use disclosure record naming the model and any fine-tuned adapter.
+
+\paragraph{Rewards.}
+Quill-RL trains a LoRA adapter (rank 16) on Qwen2.5-0.5B-Instruct with GRPO (group size 4, 200 steps, KL coefficient $0.04$) on 357 masked human paragraphs (43 longer paragraphs that could not be completed within the token limit were skipped).
+The reward combines:
+\emph{integrity}, a hard gate (any lost or duplicated sentinel scores $-1$);
+\emph{fidelity}, full credit above similarity $0.94$ and a linear penalty below;
+\emph{quality}, from LanguageTool error counts and/or an LLM judge's 1--5 rating of clarity and faithfulness;
+\emph{economy}, a steep penalty for changing more of the paragraph than the mode calls for (6\% of words for proofreading); and
+\emph{format}, a penalty for chat wrappers.
+No detector, perplexity target or ``human-likeness'' signal appears in any reward, and a unit test fails if the RL package imports the detector.
+
+\paragraph{Acceptance gate.}
+A candidate adapter replaces the current one only if, on a frozen set of 60 paragraphs, its integrity rate does not drop and its mean reward strictly improves, with similarity no more than $0.01$ lower.
+We trained two candidates: v1 without a quality reward, and v2 with Qwen2.5-3B as judge, gated against v1.
+
+\section{Results}
+\label{sec:results}
+
+\subsection{Robustness to paraphrase attacks}
+
+\begin{table}[t]
+\centering
+\caption{Detection on the test split: AUROC / TPR at 1\% FPR on clean human text (\texttt{reports/lens-v1.md}). Retrieval is an oracle whose index contains the attacks' sources.}
+\label{tab:main}
+\small
+\begin{tabular}{lcccc}
+\toprule
+Detector & \fy{ai} & \fy{+dipper 20/0} & \fy{+dipper 60/60} & \fy{+llm\_paraphrase} \\
+\midrule
+Lens-Fusion & \textbf{0.990} / \textbf{0.88} & \textbf{0.958} / \textbf{0.82} & \textbf{0.959} / \textbf{0.50} & \textbf{0.967} / \textbf{0.75} \\
+Lens-GNN & 0.965 / 0.50 & 0.962 / 0.43 & 0.916 / 0.14 & 0.953 / 0.39 \\
+Fast-DetectGPT & 0.891 / 0.36 & 0.910 / 0.27 & 0.918 / 0.27 & 0.686 / 0.05 \\
+neg.\ log-perplexity & 0.920 / 0.13 & 0.868 / 0.11 & 0.822 / 0.05 & 0.799 / 0.00 \\
+neg.\ log-rank & 0.916 / 0.24 & 0.860 / 0.25 & 0.818 / 0.14 & 0.766 / 0.02 \\
+neg.\ entropy & 0.798 / 0.01 & 0.672 / 0.00 & 0.524 / 0.00 & 0.726 / 0.00 \\
+\midrule
+Retrieval (oracle) & 1.000 / 1.00 & 0.999 / 0.95 & 0.891 / 0.61 & 1.000 / 1.00 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:main} shows the main result.
+All blind zero-shot scores lose ground under paraphrase, and the LLM paraphrase is the most damaging for them: Fast-DetectGPT's AUROC falls from $0.891$ to $0.686$ and its TPR at 1\% FPR from $0.36$ to $0.05$ (2 of 44; 95\% CI $[0.01, 0.15]$).
+Lens-Fusion keeps AUROC between $0.958$ and $0.990$ on every family.
+At the 1\% operating point it detects $75\%$ of LLM paraphrases (33/44; CI $[0.60, 0.87]$) and $82\%$ of light DIPPER paraphrases (36/44; CI $[0.67, 0.92]$).
+The strong DIPPER setting remains hard: Lens-Fusion detects half (22/44; CI $[0.35, 0.65]$), against $27\%$ for Fast-DetectGPT (12/44; CI $[0.15, 0.43]$); the intervals overlap only at their edges, and a larger test set is needed for a firm comparison.
+Lens-GNN has competitive AUROC but low TPR at the strict threshold, so structure alone does not separate the tails.
+The retrieval oracle is near-perfect except on strong DIPPER (AUROC $0.891$), where reordering and heavy rewording move the text far enough in embedding space to escape its source.
+
+\subsection{Generalisation to an unseen attack}
+
+\begin{table}[t]
+\centering
+\caption{Holding DIPPER 60/60 out of training (\texttt{reports/lens-unseen-dipper.md}) and holding edited human text out of training (\texttt{reports/lens-no-edits.md}). Lens-Fusion, AUROC / TPR at 1\% FPR.}
+\label{tab:ablation}
+\small
+\begin{tabular}{lcccc}
+\toprule
+Training data & \fy{ai} & \fy{+dipper 20/0} & \fy{+dipper 60/60} & \fy{+llm\_paraphrase} \\
+\midrule
+All families (Lens-v1) & 0.990 / 0.88 & 0.958 / 0.82 & 0.959 / 0.50 & 0.967 / 0.75 \\
+Without DIPPER 60/60 & 0.994 / 0.95 & 0.975 / 0.84 & \textbf{0.898} / \textbf{0.39} & 0.982 / 0.84 \\
+Without edited human text & 0.993 / 0.92 & 0.963 / 0.82 & 0.966 / 0.57 & 0.974 / 0.82 \\
+\midrule
+Fast-DetectGPT (reference) & 0.891 / 0.36 & 0.910 / 0.27 & 0.918 / 0.27 & 0.686 / 0.05 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+When DIPPER 60/60 is removed from training (Table~\ref{tab:ablation}), its AUROC drops from $0.959$ to $0.898$, below Fast-DetectGPT's $0.918$, and its TPR from $0.50$ to $0.39$ (17/44; CI $[0.24, 0.55]$), still above Fast-DetectGPT's $0.27$.
+Training on the attack therefore helps, and an unseen strong attack still costs much of the advantage at the AUROC level.
+The model trained without DIPPER 60/60 is slightly better on the families it keeps (e.g.\ $0.84$ vs $0.75$ on LLM paraphrase).
+With 44 texts per family this is a difference of four texts and within noise, but it suggests a possible trade-off between covering the hardest attack and sharpness on easier ones, which a multi-seed study should test.
+
+\subsection{Fairness: does honest editing get authors flagged?}
+
+\begin{table}[t]
+\centering
+\caption{False-positive rate on human test text at each detector's 1\% clean-human threshold (lower is better). Counts in parentheses. The clean-human column holds by construction.}
+\label{tab:fpr}
+\small
+\begin{tabular}{lccc}
+\toprule
+Detector & clean (n=145) & clarity edit (n=46) & proofread edit (n=46) \\
+\midrule
+Lens-Fusion & 0.007 (1) & 0.022 (1) & 0.022 (1) \\
+Lens-Fusion, trained without edits & 0.007 (1) & 0.022 (1) & 0.022 (1) \\
+Lens-GNN & 0.007 (1) & 0.000 (0) & 0.000 (0) \\
+Fast-DetectGPT & 0.007 (1) & 0.022 (1) & 0.022 (1) \\
+neg.\ log-perplexity & 0.007 (1) & 0.043 (2) & 0.022 (1) \\
+neg.\ log-rank & 0.007 (1) & 0.065 (3) & 0.065 (3) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:fpr} reports the fairness measurement.
+Light, integrity-checked editing barely moved any detector: Lens-Fusion and Fast-DetectGPT each flagged 1 of 46 edited abstracts in each mode (95\% CI $[0.00, 0.12]$), and the log-rank baseline flagged up to 3.
+Our hypothesis that \emph{training} on edited human text is needed to avoid such false positives was not supported: the model trained without edited text has the same edited-human FPR and, if anything, slightly higher TPRs (Table~\ref{tab:ablation}).
+We read this cautiously.
+The edits are deliberately conservative (similarity $\geq 0.94$), the test families are small, and our human authors are not selected for non-native writing; heavier rewriting and a non-native subset may well reproduce the bias reported by \citet{liang2023biased}.
+
+\subsection{What Lens relies on}
+
+Permutation importance on the validation split (\texttt{reports/lens-v1.md}) ranks the LLM marker-word rate first ($\Delta$AUROC $+0.041$), then the Fast-DetectGPT score ($+0.034$) and average word length ($+0.023$); every other feature contributes less than $0.004$.
+The marker-word rate is a property of current instruction-tuned generators and may not transfer to future models or to authors who adopt that vocabulary; a leave-one-generator-out evaluation is the natural next test.
+
+\subsection{Quill-RL}
+
+\begin{table}[t]
+\centering
+\caption{Quill-RL on the frozen evaluation set of 60 paragraphs (\texttt{reports/quill-rl-v1.json}, \texttt{quill-rl-v2.json}). Quality is the judge score on integrity-preserving outputs; it is only measured when the judge is active. Change is the fraction of words changed.}
+\label{tab:quill}
+\small
+\begin{tabular}{lccc}
+\toprule
+Metric & Base (0.5B) & v1: integrity rewards & v2: + LLM judge \\
+\midrule
+Integrity rate & 0.633 & \textbf{0.717} & 0.667 \\
+Format rate & 0.983 & 1.000 & 1.000 \\
+Mean similarity & 0.988 & 0.995 & 0.991 \\
+Judged quality & -- & 0.233 & \textbf{0.550} \\
+Words changed & 0.037 & 0.005 & 0.023 \\
+\midrule
+Gate decision & -- & accepted (vs base) & rejected (vs v1) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:quill} summarises the editor.
+The base 0.5B model keeps every protected span in only 63\% of paragraphs.
+Training with integrity, fidelity, economy and format rewards (v1) raises this to 72\% and makes the output format perfect, but the model learns that the safest edit is almost no edit: it changes 0.5\% of words.
+On a sample LaTeX paper it left five paragraphs unchanged and tweaked one; on the seventh it dropped a citation, and the integrity gate rejected the edit and kept the original.
+Adding an LLM judge as a quality reward (v2) produces real edits (2.3\% of words) that the judge rates much higher ($0.23 \rightarrow 0.55$), at a cost in integrity ($0.72 \rightarrow 0.67$, i.e.\ 43 vs 40 of 60 paragraphs).
+The acceptance gate rejected v2, as designed.
+The integrity difference is small and partly noise, but the outcome illustrates the intended property: a more fluent editor is not deployed if it breaks more citations.
+Getting both requires a stronger integrity incentive or a grammar-based quality signal, which we leave to future work; DPO from author decisions is implemented but no author pairs were available in this study.
+
+\section{Two evaluation pitfalls}
+\label{sec:pitfalls}
+
+\paragraph{Shortcut features leak labels.}
+In a pilot, small generators wrapped abstracts in ``**Abstract**'' headers and quotes, and a detector could learn ``formatting means machine''.
+Separately, raw type-token ratio and hapax ratio ranked as top features only because generated abstracts were about 20\% shorter and both statistics fall mechanically with length.
+We clean all generated text twice and drop length-dependent features; benchmarks that do neither are likely to overstate detection.
+
+\paragraph{Calibration ties understate TPR at low FPR.}
+Isotonic calibration is a step function, so many test texts share exactly the same probability.
+When the 1\%-FPR threshold lands on a plateau, every machine text on it counts as missed.
+In our ablation without edited text this made clean-human FPR read $0.000$ instead of $0.007$ and lowered TPRs by up to $0.25$ (e.g.\ $0.57 \rightarrow 0.82$ on LLM paraphrase after the fix), which initially suggested, wrongly, that training on edited text was important.
+Ranking by the uncalibrated score, which has the same order without ties, removes the artefact; AUROC changes by at most $0.006$.
+Calibrated probabilities should be shown to users, but ranking metrics should be computed on untied scores.
+
+\section{Limitations and threats to validity}
+
+\begin{itemize}
+  \item \textbf{Small test families.} 44--46 texts per attack or edit family give TPR intervals of about $\pm0.15$. Differences of a few texts, including the ablation trade-off, are not established. A single training seed was used.
+  \item \textbf{Generators.} Laptop-scale open models (3--7B, 4-bit) are weaker and more stylistically marked than frontier models, so detection may look easier than in practice.
+  \item \textbf{One source and domain mix.} arXiv abstracts only, 80\% physics. Full papers, other fields (PubMed, S2ORC) and other genres may behave differently.
+  \item \textbf{Editing strength.} Our edits are light by construction. Heavier legitimate rewriting, and non-native authors in particular, are the cases where false positives matter most and are not yet covered.
+  \item \textbf{Attack artefacts.} DIPPER's T5 vocabulary drops Greek letters and some symbols, occasionally repeats a sentence, and in one of 500 cases produced unrelated text. We kept these as properties of the published attack.
+  \item \textbf{Not run.} Binoculars and LanguageTool-based edits are implemented but were not part of this study.
+  \item \textbf{Calibration transfer.} Probabilities are calibrated on Bench and may not transfer to other text.
+\end{itemize}
+
+\section{Ethical considerations}
+
+A detector score is evidence about a text, not about an author's conduct, and should never be the sole basis for an accusation.
+Our results show that even a strong detector misses half of the strongest paraphrases at a strict threshold, and fairness on light edits says little about heavier, legitimate rewriting.
+Quill is an editor for an author's own draft: it never receives a detector signal, it records an AI-use disclosure for every accepted edit, and author feedback leaves the machine only through an explicit, masked opt-in.
+We declined to build a detector-evasion tool, and the reward design and tests prevent the editor from being repurposed as one.
+The benchmark contains model outputs released under their licences (Qwen2.5: Apache-2.0; Phi-3.5: MIT; Llama~3.2: Llama~3.2 Community License, ``Built with Llama'').
+
+\section{Conclusion}
+
+Training a fusion detector on attacked machine text and edited human text under their true labels makes it far more robust to paraphrase than zero-shot scores at a strict false-positive rate, without flagging lightly edited human abstracts more than the baselines do.
+Robustness to an attack seen in training does not fully carry over to an unseen strong one.
+On the editing side, checkable rewards make a small model safer, but restraint and helpfulness pull against each other, and an acceptance gate is what keeps the trade-off honest.
+The whole pipeline runs on a 6\,GB laptop GPU and a free notebook GPU, which we hope makes such audits routine rather than exceptional.
+
+\section*{Reproducibility}
+
+Code, configurations and step-by-step commands are at \url{https://github.com/madhureddy25/ScholarLens} (\texttt{LAPTOP\_COMMANDS.ps1}, \texttt{docs/WINDOWS.md}).
+The benchmark and detector are released as GitHub releases \texttt{bench-v1} and \texttt{lens-v1}.
+Hardware: an NVIDIA RTX 3050 Laptop GPU (6\,GB) for generation, Lens training and Quill-RL; a free Kaggle session with two T4 GPUs for DIPPER (about 9.5 hours for 1{,}000 paraphrases).
+Quill-RL took 1.8 hours (v1) and 5.9 hours (v2, with the judge).
+All tables in this paper are copied from the files in \texttt{reports/}.
+
+\section*{Use of AI assistants}
+
+\todo{State how AI assistants were used in this project and in writing this paper, as required by the target venue. This draft was produced with the help of Claude (Anthropic) from the repository's reports; all numbers were taken from \texttt{reports/} and should be checked by the authors.}
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\end{document}
