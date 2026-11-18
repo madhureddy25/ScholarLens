@@ -1,0 +1,129 @@
+{
+  "n_records": 5500,
+  "n_papers": 1500,
+  "by_family_and_split": {
+    "ai": {
+      "test": 145,
+      "train": 1176,
+      "val": 179
+    },
+    "ai+dipper_L20_O0": {
+      "test": 44,
+      "train": 391,
+      "val": 65
+    },
+    "ai+dipper_L60_O60": {
+      "test": 44,
+      "train": 391,
+      "val": 65
+    },
+    "ai+llm_paraphrase": {
+      "test": 44,
+      "train": 391,
+      "val": 65
+    },
+    "human": {
+      "test": 145,
+      "train": 1176,
+      "val": 179
+    },
+    "human+quill_clarity": {
+      "test": 46,
+      "train": 393,
+      "val": 61
+    },
+    "human+quill_proofread": {
+      "test": 46,
+      "train": 393,
+      "val": 61
+    }
+  },
+  "generators": {
+    "ollama:qwen2.5:7b": 500,
+    "ollama:phi3.5": 500,
+    "ollama:llama3.2:3b": 500
+  },
+  "domains": {
+    "physics": 1198,
+    "cs": 73,
+    "math": 188,
+    "q-bio": 30,
+    "q-fin": 10,
+    "stat": 1
+  },
+  "leakage": {},
+  "built_at": "2026-11-14T18:28:34+00:00",
+  "config": {
+    "bench": {
+      "out": "data/bench/laptop-v1",
+      "seed": 13,
+      "n_human": 1500,
+      "before_year": 2022,
+      "min_words": 100,
+      "max_words": 300,
+      "max_tokens": 600,
+      "concurrency": 2,
+      "prompt_styles": [
+        "title",
+        "title_first_sentence"
+      ],
+      "splits": {
+        "train": 0.8,
+        "val": 0.1,
+        "test": 0.1
+      }
+    },
+    "sources": [
+      {
+        "type": "arxiv"
+      }
+    ],
+    "generators": [
+      {
+        "model": "ollama:qwen2.5:7b",
+        "options": {
+          "temperature": 0.7,
+          "top_p": 0.95
+        }
+      },
+      {
+        "model": "ollama:phi3.5",
+        "options": {
+          "temperature": 0.7,
+          "top_p": 0.95
+        }
+      },
+      {
+        "model": "ollama:llama3.2:3b",
+        "options": {
+          "temperature": 0.7,
+          "top_p": 0.95
+        }
+      }
+    ],
+    "transforms": [
+      {
+        "type": "llm_paraphrase",
+        "model": "ollama:qwen2.5:7b",
+        "apply_to": "ai",
+        "limit": 500
+      },
+      {
+        "type": "quill",
+        "mode": "proofread",
+        "model": "ollama:qwen2.5:7b",
+        "apply_to": "human",
+        "similarity_model": "sentence-transformers/all-MiniLM-L6-v2",
+        "limit": 500
+      },
+      {
+        "type": "quill",
+        "mode": "clarity",
+        "model": "ollama:qwen2.5:7b",
+        "apply_to": "human",
+        "similarity_model": "sentence-transformers/all-MiniLM-L6-v2",
+        "limit": 500
+      }
+    ]
+  }
+}

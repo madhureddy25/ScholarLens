@@ -1,0 +1,29 @@
+{
+  "accepted": true,
+  "reasons": [],
+  "current": {
+    "adapter": null,
+    "n": 60,
+    "integrity_rate": 0.6333333333333333,
+    "format_rate": 0.9833333333333333,
+    "mean_reward": -0.21173892910116796,
+    "mean_similarity": 0.9879357094940873,
+    "mean_quality": 0.0,
+    "mean_change": 0.03704473684210526
+  },
+  "candidate": {
+    "adapter": "models\\quill-rl-v1",
+    "n": 60,
+    "integrity_rate": 0.7166666666666667,
+    "format_rate": 1.0,
+    "mean_reward": -0.07484968594401324,
+    "mean_similarity": 0.9951534372823715,
+    "mean_quality": 0.0,
+    "mean_change": 0.004604651162790698
+  },
+  "mode": "proofread",
+  "n_train": 400,
+  "n_contributions": 0,
+  "n_dpo_pairs": 0,
+  "base_model": "Qwen/Qwen2.5-0.5B-Instruct"
+}
